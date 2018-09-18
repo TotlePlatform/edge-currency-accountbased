@@ -3,9 +3,7 @@
  */
 // @flow
 
-import { currencyInfo } from './currencyInfoXRP.js'
 import type {
-  EdgeCurrencyEngine,
   EdgeTransaction,
   EdgeCurrencyEngineCallbacks,
   EdgeCurrencyEngineOptions,
@@ -37,7 +35,6 @@ class CurrencyEngine {
   walletInfo: EdgeWalletInfo
   currencyEngineCallbacks: EdgeCurrencyEngineCallbacks
   walletLocalFolder: Object
-  // rippleApi: Object
   engineOn: boolean
   addressesChecked: boolean // True once wallet has been fully checked on the network
   tokenCheckStatus: { [currencyCode: string]: number } // Each currency code can be a 0-1 value
@@ -58,15 +55,10 @@ class CurrencyEngine {
   io: EdgeIo
 
   constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
-    // Validate that we are a valid EdgeCurrencyEngine:
-    // eslint-disable-next-line no-unused-vars
-    const test: EdgeCurrencyEngine = this
-
     const currencyCode = currencyPlugin.currencyInfo.currencyCode
     const { walletLocalFolder, callbacks } = opts
 
     this.io = io_
-    // this.rippleApi = rippleApi
     this.engineOn = false
     this.addressesChecked = false
     this.tokenCheckStatus = {}
@@ -79,8 +71,8 @@ class CurrencyEngine {
     this.txIdList = {}
     this.walletInfo = walletInfo
     this.walletId = walletInfo.id ? `${walletInfo.id} - ` : ''
-    this.currencyInfo = currencyInfo
-    this.allTokens = currencyInfo.metaTokens.slice(0)
+    this.currencyInfo = currencyPlugin.currencyInfo
+    this.allTokens = currencyPlugin.currencyInfo.metaTokens.slice(0)
     this.customTokens = []
     this.timers = {}
 
@@ -94,9 +86,6 @@ class CurrencyEngine {
       this.currentSettings = this.currencyInfo.defaultSettings
     }
 
-    // Hard coded for testing
-    // this.walletInfo.keys.rippleKey = '389b07b3466eed587d6bdae09a3613611de9add2635432d6cd1521af7bbc3757'
-    // this.walletInfo.keys.displayAddress = '0x9fa817e5A48DD1adcA7BEc59aa6E3B1F5C4BeA9a'
     this.currencyEngineCallbacks = callbacks
     this.walletLocalFolder = walletLocalFolder
 
@@ -127,7 +116,7 @@ class CurrencyEngine {
   }
 
   addTransaction (currencyCode: string, edgeTransaction: EdgeTransaction) {
-    // Add or update tx in transactionsObj
+    // Add or update tx in transactionList
     const idx = this.findTransaction(currencyCode, edgeTransaction.txid)
     const txid = normalizeAddress(edgeTransaction.txid)
 
@@ -168,42 +157,42 @@ class CurrencyEngine {
     for (const tx of this.transactionList[currencyCode]) {
       txIdList.push(normalizeAddress(tx.txid))
     }
-    this.txIdList = txIdList
+    this.txIdList[currencyCode] = txIdList
   }
 
   // *************************************
   // Save the wallet data store
   // *************************************
-  saveWalletLoop = async () => {
+  async saveWalletLoop () {
     const folder = this.walletLocalFolder.folder(DATA_STORE_FOLDER)
     const promises = []
     if (this.walletLocalDataDirty) {
       this.log('walletLocalDataDirty. Saving...')
       const jsonString = JSON.stringify(this.walletLocalData)
-      promises.push(folder.file(DATA_STORE_FILE).setText(jsonString)).then(() => {
+      promises.push(folder.file(DATA_STORE_FILE).setText(jsonString).then(() => {
         this.walletLocalDataDirty = false
       }).catch(e => {
         this.log('Error saving walletLocalData')
         this.log(e)
-      })
+      }))
     }
     if (this.transactionListDirty) {
       this.log('transactionListDirty. Saving...')
       let jsonString = JSON.stringify(this.transactionList)
-      promises.push(folder.file(TRANSACTION_STORE_FILE).setText(jsonString)).catch(e => {
+      promises.push(folder.file(TRANSACTION_STORE_FILE).setText(jsonString).catch(e => {
         this.log('Error saving transactionList')
         this.log(e)
-      })
+      }))
       jsonString = JSON.stringify(this.txIdList)
-      promises.push(folder.file(TXID_LIST_FILE).setText(jsonString)).catch(e => {
+      promises.push(folder.file(TXID_LIST_FILE).setText(jsonString).catch(e => {
         this.log('Error saving txIdList')
         this.log(e)
-      })
+      }))
       jsonString = JSON.stringify(this.txIdMap)
-      promises.push(folder.file(TXID_MAP_FILE).setText(jsonString)).catch(e => {
+      promises.push(folder.file(TXID_MAP_FILE).setText(jsonString).catch(e => {
         this.log('Error saving txIdMap')
         this.log(e)
-      })
+      }))
       await Promise.all(promises)
       this.transactionListDirty = false
     } else {
@@ -224,7 +213,24 @@ class CurrencyEngine {
     }
   }
 
-  getTokenInfo (token: string) {
+  async addToLoop (func: Function, timer: number) {
+    try {
+      // $FlowFixMe
+      await func()
+    } catch (e) {
+      this.log('Error in Loop:', func, e)
+    }
+    if (this.engineOn) {
+      this.timers[func] = setTimeout(() => {
+        if (this.engineOn) {
+          this.addToLoop(func, timer)
+        }
+      }, timer)
+    }
+    return true
+  }
+
+  getTokenInfoCommon (token: string) {
     return this.allTokens.find(element => {
       return element.currencyCode === token
     })
@@ -248,7 +254,7 @@ class CurrencyEngine {
       enabledTokens: this.walletLocalData.enabledTokens,
       displayAddress: this.walletLocalData.displayAddress
     })
-    this.walletLocalData = new WalletLocalData(temp)
+    this.walletLocalData = new WalletLocalData(temp, this.currencyInfo.currencyCode)
     this.walletLocalDataDirty = true
     this.transactionList = {}
     this.txIdList = {}
@@ -456,7 +462,7 @@ class CurrencyEngine {
         numEntries + startIndex >
         this.transactionList[currencyCode].length
       ) {
-        // Don't read past the end of the transactionsObj
+        // Don't read past the end of the transactionList
         numEntries =
           this.transactionList[currencyCode].length -
           startIndex

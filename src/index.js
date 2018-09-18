@@ -4,3 +4,4 @@
 // @flow
 
 export { eosCurrencyPluginFactory } from './eos/eosPlugin.js'
+export { rippleCurrencyPluginFactory } from './xrp/xrpPlugin.js'

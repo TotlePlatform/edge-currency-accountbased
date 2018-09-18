@@ -13,17 +13,17 @@ import {
   WalletLocalData
 } from './types.js'
 import type {
-  EdgeCurrencyEngine,
   EdgeCurrencyEngineOptions,
   EdgeParsedUri,
   EdgeEncodeUri,
   EdgeCurrencyPlugin,
-  EdgeWalletInfo
+  EdgeWalletInfo,
+  EdgeIo
 } from 'edge-core-js'
 import { serialize } from 'uri-js'
 import parse from 'url-parse'
 
-export async function makeEngineCommon (currencyEngine: CurrencyEngine, plugin: EdgeCurrencyPlugin, io: EdgeIo, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions): Promise<EdgeCurrencyEngine> {
+export async function makeEngineCommon (currencyEngine: CurrencyEngine, plugin: EdgeCurrencyPlugin, io: EdgeIo, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions): Promise<CurrencyEngine> {
   const folder = currencyEngine.walletLocalFolder.folder(DATA_STORE_FOLDER)
   try {
     const result = await folder.file(DATA_STORE_FILE).getText()
@@ -33,7 +33,7 @@ export async function makeEngineCommon (currencyEngine: CurrencyEngine, plugin: 
     try {
       console.log(err)
       console.log('No walletLocalData setup yet: Failure is ok')
-      currencyEngine.walletLocalData = new WalletLocalData(null)
+      currencyEngine.walletLocalData = new WalletLocalData(null, currencyEngine.currencyInfo.currencyCode)
       currencyEngine.walletLocalData.displayAddress = currencyEngine.walletInfo.keys.displayAddress
       await folder.file(DATA_STORE_FILE)
         .setText(JSON.stringify(currencyEngine.walletLocalData))

@@ -3,31 +3,31 @@
  */
 // @flow
 
-import { currencyInfo } from './eosInfo.js'
+// import { currencyInfo } from './eosInfo.js'
 import type {
   EdgeTransaction,
   EdgeSpendInfo,
-  EdgeFreshAddress
-  // EdgeCurrencyEngine,
+  EdgeCurrencyPlugin,
+  EdgeWalletInfo,
+  EdgeCurrencyEngineOptions,
+  EdgeFreshAddress,
+  EdgeDataDump
   // EdgeCurrencyEngineCallbacks,
-  // EdgeCurrencyEngineOptions,
-  // EdgeWalletInfo,
   // EdgeMetaToken,
   // EdgeCurrencyInfo,
   // EdgeDenomination,
-  // EdgeCurrencyPlugin,
   // EdgeIo
 } from 'edge-core-js'
-import { error } from 'edge-core-js'
+// import { error } from 'edge-core-js'
 import { bns } from 'biggystring'
 import {
-  EosGetBalancesSchema,
-  EosGetBlockchainInfoSchema
+  EosGetBalancesSchema
+  // EosGetBlockchainInfoSchema
 } from './eosSchema.js'
 import {
   CurrencyEngine
 } from '../common/engine.js'
-import { validateObject } from '../utils.js'
+import { validateObject } from '../common/utils.js'
 import type { EosGetTransaction } from './eosTypes.js'
 
 const ADDRESS_POLL_MILLISECONDS = 10000
@@ -36,38 +36,36 @@ const TRANSACTION_POLL_MILLISECONDS = 3000
 const SAVE_DATASTORE_MILLISECONDS = 10000
 // const ADDRESS_QUERY_LOOKBACK_BLOCKS = (30 * 60) // ~ one minute
 
-const PRIMARY_CURRENCY = currencyInfo.currencyCode
-
 export class EosEngine extends CurrencyEngine {
   // TODO: Add currency specific params
   eosApi: Object
 
-  constructor () {
-    super()
+  constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
+    super(currencyPlugin, io_, walletInfo, opts)
     this.eosApi = {}
   }
 
   // Poll on the blockheight
-  checkServerInfoInnerLoop = async () => {
-    try {
-      const fee = await this.eosApi.getFee()
-      if (typeof fee === 'string') {
-        this.walletLocalData.recommendedFee = fee
-      }
-      const jsonObj = await this.eosApi.getServerInfo()
-      const valid = validateObject(jsonObj, EosGetBlockchainInfoSchema)
-      if (valid) {
-        const blockHeight: number = jsonObj.validatedLedger.ledgerVersion
-        this.log(`Got block height ${blockHeight}`)
-        if (this.walletLocalData.blockHeight !== blockHeight) {
-          this.walletLocalData.blockHeight = blockHeight // Convert to decimal
-          this.walletLocalDataDirty = true
-          this.currencyEngineCallbacks.onBlockHeightChanged(this.walletLocalData.blockHeight)
-        }
-      }
-    } catch (err) {
-      this.log(`Error fetching height: ${JSON.stringify(err)}`)
-    }
+  async checkServerInfoInnerLoop () {
+    // try {
+    //   const fee = await this.eosApi.getFee()
+    //   if (typeof fee === 'string') {
+    //     this.walletLocalData.recommendedFee = fee
+    //   }
+    //   const jsonObj = await this.eosApi.getServerInfo()
+    //   const valid = validateObject(jsonObj, EosGetBlockchainInfoSchema)
+    //   if (valid) {
+    //     const blockHeight: number = jsonObj.validatedLedger.ledgerVersion
+    //     this.log(`Got block height ${blockHeight}`)
+    //     if (this.walletLocalData.blockHeight !== blockHeight) {
+    //       this.walletLocalData.blockHeight = blockHeight // Convert to decimal
+    //       this.walletLocalDataDirty = true
+    //       this.currencyEngineCallbacks.onBlockHeightChanged(this.walletLocalData.blockHeight)
+    //     }
+    //   }
+    // } catch (err) {
+    //   this.log(`Error fetching height: ${JSON.stringify(err)}`)
+    // }
   }
 
   processEosTransaction (tx: EosGetTransaction) {
@@ -144,7 +142,7 @@ export class EosEngine extends CurrencyEngine {
     // }
   }
 
-  checkTransactionsInnerLoop = async () => {
+  async checkTransactionsInnerLoop () {
     // const address = this.walletLocalData.displayAddress
     // let startBlock:number = 0
     // if (this.walletLocalData.lastAddressQueryHeight > ADDRESS_QUERY_LOOKBACK_BLOCKS) {
@@ -193,7 +191,7 @@ export class EosEngine extends CurrencyEngine {
   }
 
   // Check all addresses for new transactions
-  checkAddressesInnerLoop = async () => {
+  async checkAddressesInnerLoop () {
     const address = this.walletLocalData.displayAddress
     try {
       const jsonObj = await this.eosApi.getBalances(address)
@@ -219,52 +217,11 @@ export class EosEngine extends CurrencyEngine {
     }
   }
 
-  doInitialCallbacks () {
-    for (const currencyCode of this.walletLocalData.enabledTokens) {
-      try {
-        this.currencyEngineCallbacks.onTransactionsChanged(
-          this.transactionList[currencyCode]
-        )
-        this.currencyEngineCallbacks.onBalanceChanged(currencyCode, this.walletLocalData.totalBalances[currencyCode])
-      } catch (e) {
-        this.log('Error for currencyCode', currencyCode, e)
-      }
-    }
-  }
-
-  getTokenInfo (token: string) {
-    return this.allTokens.find(element => {
-      return element.currencyCode === token
-    })
-  }
-
-  async addToLoop (func: Function, timer: number) {
-    try {
-      // $FlowFixMe
-      await func()
-    } catch (e) {
-      this.log('Error in Loop:', func, e)
-    }
-    if (this.engineOn) {
-      this.timers[func] = setTimeout(() => {
-        if (this.engineOn) {
-          this.addToLoop(func, timer)
-        }
-      }, timer)
-    }
-    return true
-  }
-
-  log (...text: Array<any>) {
-    text[0] = `${this.walletId}${text[0]}`
-    console.log(...text)
-  }
-
   // ****************************************************************************
   // Public methods
   // ****************************************************************************
 
-  updateSettings = (settings: any) => this.updateSettingsCommon(settings)
+  updateSettings (settings: any) { this.updateSettingsCommon(settings) }
 
   async startEngine () {
     this.engineOn = true
@@ -285,184 +242,186 @@ export class EosEngine extends CurrencyEngine {
     this.timers = {}
   }
 
-  resyncBlockchain = async (): Promise<void> => {
+  async resyncBlockchain (): Promise<void> {
     await this.killEngine()
     await this.resyncBlockchainCommon()
     await this.startEngine()
   }
 
   // synchronous
-  getBlockHeight = (): number => this.getBlockHeightCommon()
+  getBlockHeight (): number { return this.getBlockHeightCommon() }
 
   // asynchronous
-  enableTokens = async (tokens: Array<string>) => this.enableTokensCommon(tokens)
+  enableTokens (tokens: Array<string>) { return this.enableTokensCommon(tokens) }
 
   // asynchronous
-  disableTokens = async (tokens: Array<string>) => this.disableTokensCommon(tokens)
+  disableTokens (tokens: Array<string>) { return this.disableTokensCommon(tokens) }
 
-  getEnabledTokens = async (): Promise<Array<string>> => this.getEnabledTokensCommon()
+  getTokenInfo (token: string) { return this.getTokenInfoCommon(token) }
 
-  addCustomToken = async (tokenObj: any) => this.addCustomTokenCommon(tokenObj)
+  async getEnabledTokens (): Promise<Array<string>> { return this.getEnabledTokensCommon() }
 
-  // synchronous
-  getTokenStatus = (token: string) => this.getTokenStatusCommon(token)
-
-  // synchronous
-  getBalance = (options: any): string => this.getBalanceCommon(options)
+  async addCustomToken (tokenObj: any) { return this.addCustomTokenCommon(tokenObj) }
 
   // synchronous
-  getNumTransactions = (options: any): number => this.getNumTransactionsCommon(options)
+  getTokenStatus (token: string) { return this.getTokenStatusCommon(token) }
+
+  // synchronous
+  getBalance (options: any): string { return this.getBalanceCommon(options) }
+
+  // synchronous
+  getNumTransactions (options: any): number { return this.getNumTransactionsCommon(options) }
 
   // asynchronous
-  getTransactions = async (options: any) => this.getTransactionsCommon(options)
+  async getTransactions (options: any) { return this.getTransactionsCommon(options) }
   // synchronous
 
-  getFreshAddress = (options: any): EdgeFreshAddress => this.getFreshAddressCommon(options)
+  getFreshAddress (options: any): EdgeFreshAddress { return this.getFreshAddressCommon(options) }
 
   // synchronous
-  addGapLimitAddresses = (addresses: Array<string>, options: any) => this.addGapLimitAddressesCommon(addresses, options)
+  addGapLimitAddresses (addresses: Array<string>, options: any) { return this.addGapLimitAddressesCommon(addresses, options) }
 
   // synchronous
-  isAddressUsed = (address: string, options: any) => this.isAddressUsedCommon(address, options)
+  isAddressUsed (address: string, options: any) { return this.isAddressUsedCommon(address, options) }
 
   // synchronous
-  dumpData = (): EdgeDataDump => this.dumpDataCommon()
+  dumpData (): EdgeDataDump { return this.dumpDataCommon() }
 
   // synchronous
   async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
-    // Validate the spendInfo
-    const valid = validateObject(edgeSpendInfo, {
-      'type': 'object',
-      'properties': {
-        'currencyCode': { 'type': 'string' },
-        'networkFeeOption': { 'type': 'string' },
-        'spendTargets': {
-          'type': 'array',
-          'items': {
-            'type': 'object',
-            'properties': {
-              'currencyCode': { 'type': 'string' },
-              'publicAddress': { 'type': 'string' },
-              'nativeAmount': { 'type': 'string' },
-              'destMetadata': { 'type': 'object' },
-              'destWallet': { 'type': 'object' }
-            },
-            'required': [
-              'publicAddress'
-            ]
-          }
-        }
-      },
-      'required': [ 'spendTargets' ]
-    })
+    // // Validate the spendInfo
+    // const valid = validateObject(edgeSpendInfo, {
+    //   'type': 'object',
+    //   'properties': {
+    //     'currencyCode': { 'type': 'string' },
+    //     'networkFeeOption': { 'type': 'string' },
+    //     'spendTargets': {
+    //       'type': 'array',
+    //       'items': {
+    //         'type': 'object',
+    //         'properties': {
+    //           'currencyCode': { 'type': 'string' },
+    //           'publicAddress': { 'type': 'string' },
+    //           'nativeAmount': { 'type': 'string' },
+    //           'destMetadata': { 'type': 'object' },
+    //           'destWallet': { 'type': 'object' }
+    //         },
+    //         'required': [
+    //           'publicAddress'
+    //         ]
+    //       }
+    //     }
+    //   },
+    //   'required': [ 'spendTargets' ]
+    // })
 
-    if (!valid) {
-      throw (new Error('Error: invalid ABCSpendInfo'))
-    }
+    // if (!valid) {
+    //   throw (new Error('Error: invalid ABCSpendInfo'))
+    // }
 
-    if (edgeSpendInfo.spendTargets.length !== 1) {
-      throw (new Error('Error: only one output allowed'))
-    }
+    // if (edgeSpendInfo.spendTargets.length !== 1) {
+    //   throw (new Error('Error: only one output allowed'))
+    // }
 
-    // let tokenInfo = {}
-    // tokenInfo.contractAddress = ''
-    //
-    let currencyCode: string = ''
-    if (typeof edgeSpendInfo.currencyCode === 'string') {
-      currencyCode = edgeSpendInfo.currencyCode
-    } else {
-      currencyCode = 'XRP'
-    }
-    edgeSpendInfo.currencyCode = currencyCode
+    // // let tokenInfo = {}
+    // // tokenInfo.contractAddress = ''
+    // //
+    // let currencyCode: string = ''
+    // if (typeof edgeSpendInfo.currencyCode === 'string') {
+    //   currencyCode = edgeSpendInfo.currencyCode
+    // } else {
+    //   currencyCode = 'XRP'
+    // }
+    // edgeSpendInfo.currencyCode = currencyCode
 
-    let publicAddress = ''
+    // let publicAddress = ''
 
-    if (typeof edgeSpendInfo.spendTargets[0].publicAddress === 'string') {
-      publicAddress = edgeSpendInfo.spendTargets[0].publicAddress
-    } else {
-      throw new Error('No valid spendTarget')
-    }
+    // if (typeof edgeSpendInfo.spendTargets[0].publicAddress === 'string') {
+    //   publicAddress = edgeSpendInfo.spendTargets[0].publicAddress
+    // } else {
+    //   throw new Error('No valid spendTarget')
+    // }
 
-    let nativeAmount = '0'
-    if (typeof edgeSpendInfo.spendTargets[0].nativeAmount === 'string') {
-      nativeAmount = edgeSpendInfo.spendTargets[0].nativeAmount
-    } else {
-      throw (new Error('Error: no amount specified'))
-    }
+    // let nativeAmount = '0'
+    // if (typeof edgeSpendInfo.spendTargets[0].nativeAmount === 'string') {
+    //   nativeAmount = edgeSpendInfo.spendTargets[0].nativeAmount
+    // } else {
+    //   throw (new Error('Error: no amount specified'))
+    // }
 
-    if (bns.eq(nativeAmount, '0')) {
-      throw (new error.NoAmountSpecifiedError())
-    }
+    // if (bns.eq(nativeAmount, '0')) {
+    //   throw (new error.NoAmountSpecifiedError())
+    // }
 
-    const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
-    const nativeNetworkFee = bns.mul(this.walletLocalData.recommendedFee, '1000000')
+    // const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
+    // const nativeNetworkFee = bns.mul(this.walletLocalData.recommendedFee, '1000000')
 
-    if (currencyCode === PRIMARY_CURRENCY) {
-      const totalTxAmount = bns.add(nativeNetworkFee, nativeAmount)
-      const virtualTxAmount = bns.add(totalTxAmount, '20000000')
-      if (bns.gt(virtualTxAmount, nativeBalance)) {
-        throw new error.InsufficientFundsError()
-      }
-    }
+    // if (currencyCode === PRIMARY_CURRENCY) {
+    //   const totalTxAmount = bns.add(nativeNetworkFee, nativeAmount)
+    //   const virtualTxAmount = bns.add(totalTxAmount, '20000000')
+    //   if (bns.gt(virtualTxAmount, nativeBalance)) {
+    //     throw new error.InsufficientFundsError()
+    //   }
+    // }
 
-    const exchangeAmount = bns.div(nativeAmount, '1000000', 6)
-    let uniqueIdentifier
-    if (
-      edgeSpendInfo.spendTargets[0].otherParams &&
-      edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier
-    ) {
-      if (typeof edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier === 'string') {
-        uniqueIdentifier = parseInt(edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier)
-      } else {
-        throw new Error('Error invalid destinationtag')
-      }
-    }
-    const payment = {
-      source: {
-        address: this.walletLocalData.displayAddress,
-        maxAmount: {
-          value: exchangeAmount,
-          currency: currencyCode
-        }
-      },
-      destination: {
-        address: publicAddress,
-        amount: {
-          value: exchangeAmount,
-          currency: currencyCode
-        },
-        tag: uniqueIdentifier
-      }
-    }
+    // const exchangeAmount = bns.div(nativeAmount, '1000000', 6)
+    // let uniqueIdentifier
+    // if (
+    //   edgeSpendInfo.spendTargets[0].otherParams &&
+    //   edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier
+    // ) {
+    //   if (typeof edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier === 'string') {
+    //     uniqueIdentifier = parseInt(edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier)
+    //   } else {
+    //     throw new Error('Error invalid destinationtag')
+    //   }
+    // }
+    // const payment = {
+    //   source: {
+    //     address: this.walletLocalData.displayAddress,
+    //     maxAmount: {
+    //       value: exchangeAmount,
+    //       currency: currencyCode
+    //     }
+    //   },
+    //   destination: {
+    //     address: publicAddress,
+    //     amount: {
+    //       value: exchangeAmount,
+    //       currency: currencyCode
+    //     },
+    //     tag: uniqueIdentifier
+    //   }
+    // }
 
-    let preparedTx = {}
-    try {
-      preparedTx = await this.eosApi.preparePayment(
-        this.walletLocalData.displayAddress,
-        payment,
-        { maxLedgerVersionOffset: 300 }
-      )
-    } catch (err) {
-      console.log(err)
-      throw new Error('Error in preparePayment')
-    }
+    // let preparedTx = {}
+    // try {
+    //   preparedTx = await this.eosApi.preparePayment(
+    //     this.walletLocalData.displayAddress,
+    //     payment,
+    //     { maxLedgerVersionOffset: 300 }
+    //   )
+    // } catch (err) {
+    //   console.log(err)
+    //   throw new Error('Error in preparePayment')
+    // }
 
-    const otherParams: RippleParams = {
-      preparedTx
-    }
+    // const otherParams: RippleParams = {
+    //   preparedTx
+    // }
 
-    nativeAmount = '-' + nativeAmount
+    // nativeAmount = '-' + nativeAmount
 
     const edgeTransaction: EdgeTransaction = {
       txid: '', // txid
       date: 0, // date
-      currencyCode, // currencyCode
+      currencyCode: '', // currencyCode
       blockHeight: 0, // blockHeight
-      nativeAmount, // nativeAmount
-      networkFee: nativeNetworkFee, // networkFee
+      nativeAmount: '', // nativeAmount
+      networkFee: '', // networkFee
       ourReceiveAddresses: [], // ourReceiveAddresses
       signedTx: '0', // signedTx
-      otherParams
+      otherParams: {}
     }
 
     console.log('Payment transaction prepared...')
@@ -492,7 +451,7 @@ export class EosEngine extends CurrencyEngine {
   }
 
   // asynchronous
-  saveTx = async (edgeTransaction: EdgeTransaction) => this.saveTxCommon(edgeTransaction)
+  async saveTx (edgeTransaction: EdgeTransaction) { return this.saveTxCommon(edgeTransaction) }
 
   getDisplayPrivateSeed () {
     if (this.walletInfo.keys && this.walletInfo.keys.rippleKey) {

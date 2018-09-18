@@ -1,7 +1,7 @@
 {
-  "name": "edge-currency-ripple",
+  "name": "edge-currency-accountbased",
   "version": "0.0.8",
-  "description": "Edge Ripple currency plugin",
+  "description": "Edge currency plugin for account based currencies",
   "homepage": "https://edge.app/",
   "license": "SEE LICENSE IN LICENSE",
   "author": "Edge (Airbitz, Inc)",
@@ -13,11 +13,11 @@
     "README.md",
     "lib/*"
   ],
-  "main": "./lib/indexRipple.js",
-  "module": "./lib/indexRippple.es.js",
+  "main": "./lib/index.js",
+  "module": "./lib/index.es.js",
   "repository": {
     "type": "git",
-    "url": "git@github.com:Airbitz/edge-currency-ripple.git"
+    "url": "git@github.com:EdgeApp/edge-currency-accountbased.git"
   },
   "scripts": {
     "build": "npm run rollup && npm run build:flow",

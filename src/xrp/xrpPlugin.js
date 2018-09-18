@@ -2,7 +2,7 @@
  * Created by paul on 8/8/17.
  */
 // @flow
-import { currencyInfo } from './eosInfo.js'
+import { currencyInfo } from './xrpInfo.js'
 import { makeEngineCommon, parseUriCommon, encodeUriCommon } from '../common/plugin.js'
 import type {
   EdgeCurrencyEngine,
@@ -12,8 +12,16 @@ import type {
   EdgeCurrencyPluginFactory,
   EdgeWalletInfo
 } from 'edge-core-js'
-import { EosEngine } from './eosEngine'
+import { RippleAPI } from 'edge-ripple-lib'
+import { XrpEngine } from './xrpEngine.js'
 import { bns } from 'biggystring'
+import baseX from 'base-x'
+import keypairs from 'edge-ripple-keypairs'
+
+const base58Codec = baseX(
+  '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+)
+
 let io
 
 function getDenomInfo (denom: string) {
@@ -23,33 +31,43 @@ function getDenomInfo (denom: string) {
 }
 
 function checkAddress (address: string): boolean {
-  if (address.length !== 12) {
+  let data: Uint8Array
+  try {
+    data = base58Codec.decode(address)
+  } catch (e) {
     return false
   }
-  // const chars = '.12345abcdefghijklmnopqrstuvwxyz'
-  // TODO: Check address for each of characters in `chars`
-  return true
+
+  return data.length === 25 && address.charAt(0) === 'r'
 }
 
-export const eosCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
+export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
   pluginType: 'currency',
   pluginName: currencyInfo.pluginName,
 
   async makePlugin (opts: any): Promise<EdgeCurrencyPlugin> {
     io = opts.io
 
-    // TODO: Initialize currency library if needed
+    const rippleApi = new RippleAPI({
+      server: currencyInfo.defaultSettings.otherSettings.rippledServers[0] // Public rippled server
+    })
+
     return {
-      pluginName: 'eos',
+      pluginName: 'ripple',
       currencyInfo,
 
       createPrivateKey: (walletType: string) => {
         const type = walletType.replace('wallet:', '')
 
-        if (type === 'eos') {
-          // TODO: User currency library to create private key
+        if (type === 'ripple' || type === 'ripple-secp256k1') {
+          const algorithm = type === 'ripple-secp256k1' ? 'ecdsa-secp256k1' : 'ed25519'
+          const entropy = Array.from(io.random(32))
+          const address = rippleApi.generateAddress({
+            algorithm,
+            entropy
+          })
 
-          return { }
+          return { rippleKey: address.secret }
         } else {
           throw new Error('InvalidWalletType')
         }
@@ -57,40 +75,64 @@ export const eosCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
       derivePublicKey: (walletInfo: EdgeWalletInfo) => {
         const type = walletInfo.type.replace('wallet:', '')
-        if (type === 'eos') {
-          // TODO: User currency library to create private key
-          // const displayAddress = keypairs.deriveAddress(keypair.publicKey)
-          return { }
+        if (type === 'ripple' || type === 'ripple-secp256k1') {
+          const keypair = keypairs.deriveKeypair(walletInfo.keys.rippleKey)
+          const displayAddress = keypairs.deriveAddress(keypair.publicKey)
+          return { displayAddress }
         } else {
           throw new Error('InvalidWalletType')
         }
       },
 
       async makeEngine (walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions): Promise<EdgeCurrencyEngine> {
-        const currencyEngine = new EosEngine(this, io, walletInfo, opts)
+        const currencyEngine = new XrpEngine(this, io, walletInfo, opts)
+
+        // XRP specific
+        currencyEngine.walletLocalData.otherData.recommendedFee = '0'
+        currencyEngine.rippleApi = rippleApi
+
         await makeEngineCommon(currencyEngine, this, io, walletInfo, opts)
 
         // TODO: Initialize anything specific to this currency
+
         const out: EdgeCurrencyEngine = currencyEngine
         return out
       },
 
       parseUri: (uri: string) => {
-        const { parsedUri, edgeParsedUri } = parseUriCommon(uri, {
-          'eos': true
-        })
+        const networks = { 'ripple': true }
+        let { parsedUri, edgeParsedUri } = parseUriCommon(uri, networks)
+
+        // Handle special case of https://ripple.com//send?to= URIs
+        if (
+          parsedUri.protocol === 'https:' &&
+          parsedUri.host === 'ripple.com' &&
+          parsedUri.pathname === '//send') {
+          // Parse "https://ripple.com//send?to=" format URI
+          const toStr = parsedUri.query.to
+          if (toStr) {
+            // Redo parse
+            uri = uri.replace('https://ripple.com//send', `ripple:${toStr}`)
+            const results = parseUriCommon(uri, networks)
+            parsedUri = results.parsedUri
+            edgeParsedUri = results.edgeParsedUri
+          } else {
+            throw new Error('InvalidUriError')
+          }
+        }
+
         let nativeAmount: string | null = null
         let currencyCode: string | null = null
 
         const amountStr = parsedUri.query.amount
         if (amountStr && typeof amountStr === 'string') {
-          const denom = getDenomInfo('EOS')
+          const denom = getDenomInfo('XRP')
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
           nativeAmount = bns.mul(amountStr, denom.multiplier)
           nativeAmount = bns.toFixed(nativeAmount, 0, 0)
-          currencyCode = 'EOS'
+          currencyCode = 'XRP'
 
           edgeParsedUri.nativeAmount = nativeAmount || undefined
           edgeParsedUri.currencyCode = currencyCode || undefined
@@ -111,7 +153,7 @@ export const eosCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
         }
         let amount
         if (typeof obj.nativeAmount === 'string') {
-          let currencyCode: string = 'EOS'
+          let currencyCode: string = 'XRP'
           const nativeAmount: string = obj.nativeAmount
           if (typeof obj.currencyCode === 'string') {
             currencyCode = obj.currencyCode
@@ -122,7 +164,7 @@ export const eosCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           }
           amount = bns.div(nativeAmount, denom.multiplier, 18)
         }
-        const encodedUri = encodeUriCommon(obj, 'eos', amount)
+        const encodedUri = encodeUriCommon(obj, 'ripple', amount)
         return encodedUri
       }
     }

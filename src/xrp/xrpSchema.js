@@ -18,7 +18,7 @@ export const XrpGetServerInfoSchema = {
   }
 }
 
-export const GetBalancesSchema = {
+export const XrpGetBalancesSchema = {
   type: 'array',
   items: {
     type: 'object',
@@ -29,7 +29,7 @@ export const GetBalancesSchema = {
   }
 }
 
-export const GetTransactionsSchema = {
+export const XrpGetTransactionsSchema = {
   type: 'array',
   items: {
     type: 'object',

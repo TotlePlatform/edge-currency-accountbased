@@ -1,6 +1,6 @@
 // @flow
 import { describe, it, before } from 'mocha'
-import * as Factories from '../../src/indexRipple.js'
+import * as Factories from '../../src/index.js'
 import { assert } from 'chai'
 import fixtures from './fixtures.json'
 
