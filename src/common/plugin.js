@@ -63,6 +63,9 @@ export async function makeEngineCommon (currencyEngine: CurrencyEngine, plugin: 
   currencyEngine.transactionsLoadingPromise = folder.file(TRANSACTION_STORE_FILE).getText().then(result => {
     currencyEngine.transactionList = JSON.parse(result)
     currencyEngine.transactionsLoadingPromise = null
+  }).catch(e => {
+    console.log(e)
+    console.log('Failed to load transactionList store file. Failure is ok on new device')
   })
 
   for (const token of currencyEngine.walletLocalData.enabledTokens) {
@@ -74,6 +77,11 @@ export async function makeEngineCommon (currencyEngine: CurrencyEngine, plugin: 
 export function parseUriCommon (uri: string, networks: {[network: string]: boolean}) {
   const parsedUri = parse(uri, {}, true)
   let address: string
+
+  // Remove ":" from protocol
+  if (parsedUri.protocol) {
+    parsedUri.protocol = parsedUri.protocol.replace(':', '')
+  }
 
   if (
     parsedUri.protocol &&

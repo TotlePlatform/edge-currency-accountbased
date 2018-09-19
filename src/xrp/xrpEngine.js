@@ -239,10 +239,11 @@ export class XrpEngine extends CurrencyEngine {
   async startEngine () {
     this.engineOn = true
     this.doInitialCallbacks()
-    this.addToLoop(this.checkServerInfoInnerLoop, BLOCKHEIGHT_POLL_MILLISECONDS)
-    this.addToLoop(this.checkAddressesInnerLoop, ADDRESS_POLL_MILLISECONDS)
-    this.addToLoop(this.checkTransactionsInnerLoop, TRANSACTION_POLL_MILLISECONDS)
-    this.addToLoop(this.saveWalletLoop, SAVE_DATASTORE_MILLISECONDS)
+    await this.rippleApi.connect()
+    this.addToLoop('checkServerInfoInnerLoop', BLOCKHEIGHT_POLL_MILLISECONDS)
+    this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
+    this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
+    this.addToLoop('saveWalletLoop', SAVE_DATASTORE_MILLISECONDS)
   }
 
   async killEngine () {
@@ -253,6 +254,7 @@ export class XrpEngine extends CurrencyEngine {
       clearTimeout(this.timers[timer])
     }
     this.timers = {}
+    await this.rippleApi.disconnect()
   }
 
   async resyncBlockchain (): Promise<void> {

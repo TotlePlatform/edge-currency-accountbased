@@ -213,10 +213,10 @@ class CurrencyEngine {
     }
   }
 
-  async addToLoop (func: Function, timer: number) {
+  async addToLoop (func: string, timer: number) {
     try {
       // $FlowFixMe
-      await func()
+      await this[func]()
     } catch (e) {
       this.log('Error in Loop:', func, e)
     }

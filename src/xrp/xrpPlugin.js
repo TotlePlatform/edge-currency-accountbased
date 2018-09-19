@@ -17,6 +17,7 @@ import { XrpEngine } from './xrpEngine.js'
 import { bns } from 'biggystring'
 import baseX from 'base-x'
 import keypairs from 'edge-ripple-keypairs'
+import parse from 'url-parse'
 
 const base58Codec = baseX(
   '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
@@ -88,10 +89,13 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
         const currencyEngine = new XrpEngine(this, io, walletInfo, opts)
 
         // XRP specific
-        currencyEngine.walletLocalData.otherData.recommendedFee = '0'
         currencyEngine.rippleApi = rippleApi
 
         await makeEngineCommon(currencyEngine, this, io, walletInfo, opts)
+
+        if (!currencyEngine.walletLocalData.otherData.recommendedFee) {
+          currencyEngine.walletLocalData.otherData.recommendedFee = '0'
+        }
 
         // TODO: Initialize anything specific to this currency
 
@@ -101,25 +105,18 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
       parseUri: (uri: string) => {
         const networks = { 'ripple': true }
-        let { parsedUri, edgeParsedUri } = parseUriCommon(uri, networks)
+        const RIPPLE_DOT_COM_URI_PREFIX = 'https://ripple.com//send'
 
         // Handle special case of https://ripple.com//send?to= URIs
-        if (
-          parsedUri.protocol === 'https:' &&
-          parsedUri.host === 'ripple.com' &&
-          parsedUri.pathname === '//send') {
-          // Parse "https://ripple.com//send?to=" format URI
-          const toStr = parsedUri.query.to
-          if (toStr) {
-            // Redo parse
-            uri = uri.replace('https://ripple.com//send', `ripple:${toStr}`)
-            const results = parseUriCommon(uri, networks)
-            parsedUri = results.parsedUri
-            edgeParsedUri = results.edgeParsedUri
-          } else {
-            throw new Error('InvalidUriError')
+        if (uri.includes(RIPPLE_DOT_COM_URI_PREFIX)) {
+          const parsedUri = parse(uri, {}, true)
+          const addr = parsedUri.query.to
+          if (addr) {
+            uri = uri.replace(RIPPLE_DOT_COM_URI_PREFIX, `ripple:${addr}`)
           }
         }
+
+        const { parsedUri, edgeParsedUri } = parseUriCommon(uri, networks)
 
         let nativeAmount: string | null = null
         let currencyCode: string | null = null

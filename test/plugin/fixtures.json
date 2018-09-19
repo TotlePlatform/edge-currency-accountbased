@@ -45,27 +45,21 @@
         "publicAddress": "rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn",
         "nativeAmount": "123",
         "currencyCode": "XRP",
-        "metadata": {
-          "name": "Johnny Ripple"
-        }
+        "label": "Johnny Ripple"
       }, "ripple:rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn?amount=0.000123&label=Johnny%20Ripple"],
       "address, amount, label, & message": [{
         "publicAddress": "rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn",
         "nativeAmount": "123",
         "currencyCode": "XRP",
-        "metadata": {
-          "name": "Johnny Ripple",
-          "message": "Hello World, I miss you !"
-        }
+        "label": "Johnny Ripple",
+        "message": "Hello World, I miss you !"
       }, "ripple:rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn?amount=0.000123&label=Johnny%20Ripple&message=Hello%20World,%20I%20miss%20you%20!"],
       "invalid currencyCode": [{
         "publicAddress": "rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn",
         "nativeAmount": "123",
         "currencyCode": "INVALID",
-        "metadata": {
-          "name": "Johnny Ripple",
-          "message": "Hello World, I miss you !"
-        }
+        "label": "Johnny Ripple",
+        "message": "Hello World, I miss you !"
       }]
     }
   }
