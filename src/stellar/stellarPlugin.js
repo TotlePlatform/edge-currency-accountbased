@@ -2,8 +2,8 @@
  * Created by paul on 8/8/17.
  */
 // @flow
-import { currencyInfo } from './xrpInfo.js'
-import { makeEngineCommon, parseUriCommon, encodeUriCommon } from '../common/plugin.js'
+import { currencyInfo } from './stellarInfo.js'
+import { makeEngineCommon, parseUriCommon } from '../common/plugin.js'
 import type {
   EdgeCurrencyEngine,
   EdgeCurrencyEngineOptions,
@@ -12,17 +12,15 @@ import type {
   EdgeCurrencyPluginFactory,
   EdgeWalletInfo
 } from 'edge-core-js'
+// import { RippleAPI } from 'edge-ripple-lib'
 import { bns } from 'biggystring'
-import baseX from 'base-x'
-import keypairs from 'edge-ripple-keypairs'
+import { serialize } from 'uri-js'
 import parse from 'url-parse'
 
-import { RippleAPI } from 'edge-ripple-lib'
-import { XrpEngine } from './xrpEngine.js'
+import stellarApi from 'stellar-sdk'
+import { StellarEngine } from './stellarEngine.js'
 
-const base58Codec = baseX(
-  '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-)
+const URI_PREFIX = 'web+stellar'
 
 let io
 
@@ -32,27 +30,22 @@ function getDenomInfo (denom: string) {
   })
 }
 
-function checkAddress (address: string): boolean {
-  let data: Uint8Array
-  try {
-    data = base58Codec.decode(address)
-  } catch (e) {
-    return false
-  }
-
-  return data.length === 25 && address.charAt(0) === 'r'
-}
-
-export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
+export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
   pluginType: 'currency',
   pluginName: currencyInfo.pluginName,
 
   async makePlugin (opts: any): Promise<EdgeCurrencyPlugin> {
     io = opts.io
 
-    const rippleApi = new RippleAPI({
-      server: currencyInfo.defaultSettings.otherSettings.rippledServers[0] // Public rippled server
-    })
+    function checkAddress (address: string): boolean {
+      // TODO: check address
+      try {
+        stellarApi.Keypair.fromPublicKey(address)
+        return true
+      } catch (e) {
+        return false
+      }
+    }
 
     return {
       pluginName: 'ripple',
@@ -61,15 +54,10 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
       createPrivateKey: (walletType: string) => {
         const type = walletType.replace('wallet:', '')
 
-        if (type === 'ripple' || type === 'ripple-secp256k1') {
-          const algorithm = type === 'ripple-secp256k1' ? 'ecdsa-secp256k1' : 'ed25519'
+        if (type === 'stellar') {
           const entropy = Array.from(io.random(32))
-          const address = rippleApi.generateAddress({
-            algorithm,
-            entropy
-          })
-
-          return { rippleKey: address.secret }
+          const keypair = stellarApi.Keypair.fromRawEd25519Seed(entropy)
+          return { stellarKey: keypair.secret() }
         } else {
           throw new Error('InvalidWalletType')
         }
@@ -77,26 +65,20 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
       derivePublicKey: (walletInfo: EdgeWalletInfo) => {
         const type = walletInfo.type.replace('wallet:', '')
-        if (type === 'ripple' || type === 'ripple-secp256k1') {
-          const keypair = keypairs.deriveKeypair(walletInfo.keys.rippleKey)
-          const displayAddress = keypairs.deriveAddress(keypair.publicKey)
-          return { displayAddress }
+        if (type === 'stellar') {
+          const keypair = stellarApi.Keypair.fromSecret(walletInfo.keys.stellarKey)
+          return { displayAddress: keypair.publicKey() }
         } else {
           throw new Error('InvalidWalletType')
         }
       },
 
       async makeEngine (walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions): Promise<EdgeCurrencyEngine> {
-        const currencyEngine = new XrpEngine(this, io, walletInfo, opts)
+        const currencyEngine = new StellarEngine(this, io, walletInfo, opts)
 
-        // XRP specific
-        currencyEngine.rippleApi = rippleApi
+        currencyEngine.stellarApi = stellarApi
 
         await makeEngineCommon(currencyEngine, this, io, walletInfo, opts)
-
-        if (!currencyEngine.walletLocalData.otherData.recommendedFee) {
-          currencyEngine.walletLocalData.otherData.recommendedFee = '0'
-        }
 
         // TODO: Initialize anything specific to this currency
 
@@ -105,15 +87,16 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
       },
 
       parseUri: (uri: string) => {
-        const networks = { 'ripple': true }
-        const RIPPLE_DOT_COM_URI_PREFIX = 'https://ripple.com//send'
+        const networks = {}
+        networks[URI_PREFIX] = true
+        const STELLAR_SEP007_PREFIX = `${URI_PREFIX}:pay`
 
         // Handle special case of https://ripple.com//send?to= URIs
-        if (uri.includes(RIPPLE_DOT_COM_URI_PREFIX)) {
+        if (uri.includes(STELLAR_SEP007_PREFIX)) {
           const parsedUri = parse(uri, {}, true)
-          const addr = parsedUri.query.to
+          const addr = parsedUri.query.destination
           if (addr) {
-            uri = uri.replace(RIPPLE_DOT_COM_URI_PREFIX, `ripple:${addr}`)
+            uri = uri.replace(STELLAR_SEP007_PREFIX, `${URI_PREFIX}:${addr}`)
           }
         }
 
@@ -124,13 +107,13 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
         const amountStr = parsedUri.query.amount
         if (amountStr && typeof amountStr === 'string') {
-          const denom = getDenomInfo('XRP')
+          const denom = getDenomInfo('XLM')
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
           nativeAmount = bns.mul(amountStr, denom.multiplier)
           nativeAmount = bns.toFixed(nativeAmount, 0, 0)
-          currencyCode = 'XRP'
+          currencyCode = 'XLM'
 
           edgeParsedUri.nativeAmount = nativeAmount || undefined
           edgeParsedUri.currencyCode = currencyCode || undefined
@@ -140,7 +123,17 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           throw new Error('InvalidPublicAddressError')
         }
 
-        edgeParsedUri.uniqueIdentifier = parsedUri.query.tag || undefined
+        if (parsedUri.query.msg) {
+          edgeParsedUri.metadata = {
+            notes: parsedUri.query.msg
+          }
+        }
+        if (parsedUri.query.asset_code) {
+          if (parsedUri.query.asset_code.toUpperCase() !== 'XLM') {
+            throw new Error('InternalErrorInvalidCurrencyCode')
+          }
+        }
+        edgeParsedUri.uniqueIdentifier = parsedUri.query.memo || undefined
         return edgeParsedUri
       },
 
@@ -151,7 +144,7 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
         }
         let amount
         if (typeof obj.nativeAmount === 'string') {
-          let currencyCode: string = 'XRP'
+          let currencyCode: string = 'XLM'
           const nativeAmount: string = obj.nativeAmount
           if (typeof obj.currencyCode === 'string') {
             currencyCode = obj.currencyCode
@@ -162,8 +155,31 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           }
           amount = bns.div(nativeAmount, denom.multiplier, 18)
         }
-        const encodedUri = encodeUriCommon(obj, 'ripple', amount)
-        return encodedUri
+        if (!amount && !obj.label && !obj.message) {
+          return obj.publicAddress
+        } else {
+          let queryString: string = `destination=${obj.publicAddress}&`
+          if (amount) {
+            queryString += 'amount=' + amount + '&'
+          }
+          if (obj.label || obj.message) {
+            if (typeof obj.label === 'string') {
+              queryString += 'label=' + obj.label + '&'
+            }
+            if (typeof obj.message === 'string') {
+              queryString += 'msg=' + obj.message + '&'
+            }
+          }
+          queryString = queryString.substr(0, queryString.length - 1)
+
+          const serializeObj = {
+            scheme: URI_PREFIX,
+            path: 'pay',
+            query: queryString
+          }
+          const url = serialize(serializeObj)
+          return url
+        }
       }
     }
   }
