@@ -19,7 +19,6 @@ import type {
   // EdgeIo
 } from 'edge-core-js'
 import { error } from 'edge-core-js'
-import { sprintf } from 'sprintf-js'
 
 import { bns } from 'biggystring'
 import {
@@ -64,6 +63,7 @@ export class XrpEngine extends CurrencyEngine {
       const fee = await this.rippleApi.getFee()
       if (typeof fee === 'string') {
         this.walletLocalData.otherData.recommendedFee = fee
+        this.walletLocalDataDirty = true
       }
       const jsonObj = await this.rippleApi.getServerInfo()
       const valid = validateObject(jsonObj, XrpGetServerInfoSchema)
@@ -119,38 +119,7 @@ export class XrpEngine extends CurrencyEngine {
           signedTx: 'has_been_signed',
           otherParams: {}
         }
-
-        const idx = this.findTransaction(currencyCode, edgeTransaction.txid)
-        if (idx === -1) {
-          this.log(sprintf('New transaction: %s', edgeTransaction.txid))
-
-          // New transaction not in database
-          this.addTransaction(currencyCode, edgeTransaction)
-        } else {
-          // Already have this tx in the database. See if anything changed
-          const transactionsArray = this.transactionList[ currencyCode ]
-          const edgeTx = transactionsArray[ idx ]
-
-          if (
-            edgeTx.blockHeight !== edgeTransaction.blockHeight ||
-            edgeTx.networkFee !== edgeTransaction.networkFee ||
-            edgeTx.nativeAmount !== edgeTransaction.nativeAmount
-          ) {
-            this.log(sprintf('Update transaction: %s height:%s',
-              edgeTransaction.txid,
-              edgeTransaction.blockHeight))
-            this.updateTransaction(currencyCode, edgeTransaction, idx)
-          } else {
-            // this.log(sprintf('Old transaction. No Update: %s', tx.hash))
-          }
-        }
-      }
-
-      if (this.transactionsChangedArray.length > 0) {
-        this.currencyEngineCallbacks.onTransactionsChanged(
-          this.transactionsChangedArray
-        )
-        this.transactionsChangedArray = []
+        this.addTransaction(currencyCode, edgeTransaction)
       }
     }
   }
@@ -179,6 +148,12 @@ export class XrpEngine extends CurrencyEngine {
           const tx = transactions[i]
           this.processRippleTransaction(tx)
         }
+        if (this.transactionsChangedArray.length > 0) {
+          this.currencyEngineCallbacks.onTransactionsChanged(
+            this.transactionsChangedArray
+          )
+          this.transactionsChangedArray = []
+        }
         this.updateOnAddressesChecked()
       }
     } catch (e) {
@@ -194,7 +169,7 @@ export class XrpEngine extends CurrencyEngine {
     if (this.addressesChecked) {
       return
     }
-    this.addressesChecked = true
+    this.addressesChecked = 0
     this.walletLocalData.lastAddressQueryHeight = this.walletLocalData.blockHeight
     this.currencyEngineCallbacks.onAddressesChecked(1)
   }

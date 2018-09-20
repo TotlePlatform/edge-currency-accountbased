@@ -21,176 +21,180 @@ import type {
 // import { error } from 'edge-core-js'
 // import { sprintf } from 'sprintf-js'
 
-// import { bns } from 'biggystring'
+import { bns } from 'biggystring'
 // import {
 //   // StellarGetServerInfoSchema,
 //   StellarGetBalancesSchema,
 //   StellarGetTransactionsSchema
 // } from './stellarSchema.js'
 import {
+  type StellarAccount,
+  type StellarOperation,
   type StellarTransaction
 } from './stellarTypes.js'
 import {
   CurrencyEngine
 } from '../common/engine.js'
-import { validateObject } from '../common/utils.js'
+import { validateObject, getDenomInfo } from '../common/utils.js'
 
-// const ADDRESS_POLL_MILLISECONDS = 10000
-// const BLOCKHEIGHT_POLL_MILLISECONDS = 15000
-// const TRANSACTION_POLL_MILLISECONDS = 3000
-// const SAVE_DATASTORE_MILLISECONDS = 10000
-// const ADDRESS_QUERY_LOOKBACK_BLOCKS = (30 * 60) // ~ one minute
+const TX_QUERY_PAGING_LIMIT = 2
+const ADDRESS_POLL_MILLISECONDS = 15000
+const BLOCKCHAIN_POLL_MILLISECONDS = 30000
+const TRANSACTION_POLL_MILLISECONDS = 5000
+const SAVE_DATASTORE_MILLISECONDS = 10000
 
-// type StellarParams = {
-//   preparedTx: Object
-//   // publicAddress?: string,
-//   // contractAddress?: string
-// }
 export class StellarEngine extends CurrencyEngine {
   // TODO: Add currency specific params
   stellarApi: Object
+  stellarServer: Object
+  balancesChecked: number
+  transactionsChecked: number
 
   constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     super(currencyPlugin, io_, walletInfo, opts)
     this.stellarApi = {}
+    this.balancesChecked = 0
+    this.transactionsChecked = 0
   }
 
-  // Poll on the blockheight
-  async checkServerInfoInnerLoop () {
-    try {
-      // const fee = await this.stellarApi.getFee()
-      // const jsonObj = await this.stellarApi.getServerInfo()
-      // const valid = validateObject(jsonObj, StellarGetServerInfoSchema)
-      // if (valid) {
-      //   const blockHeight: number = jsonObj.validatedLedger.ledgerVersion
-      //   this.log(`Got block height ${blockHeight}`)
-      //   if (this.walletLocalData.blockHeight !== blockHeight) {
-      //     this.walletLocalData.blockHeight = blockHeight // Convert to decimal
-      //     this.walletLocalDataDirty = true
-      //     this.currencyEngineCallbacks.onBlockHeightChanged(this.walletLocalData.blockHeight)
-      //   }
-      // }
-    } catch (err) {
-      this.log(`Error fetching height: ${JSON.stringify(err)}`)
+  async processTransaction (tx: StellarOperation): Promise<string> {
+    const ourReceiveAddresses:Array<string> = []
+
+    let currencyCode = ''
+    let exchangeAmount = ''
+    let fromAddress = ''
+    let toAddress, nativeAmount, networkFee
+    if (tx.type === 'create_account') {
+      fromAddress = tx.source_account
+      toAddress = tx.account
+      exchangeAmount = tx.starting_balance
+      currencyCode = this.currencyInfo.currencyCode
+    } else if (tx.type === 'payment') {
+      fromAddress = tx.from
+      toAddress = tx.to
+      exchangeAmount = tx.amount
+      if (tx.asset_type === 'native') {
+        currencyCode = this.currencyInfo.currencyCode
+      } else {
+        currencyCode = tx.asset_type
+      }
     }
+
+    const date: number = Date.parse(tx.created_at) / 1000
+    const denom = getDenomInfo(this.currencyInfo, currencyCode)
+    if (denom && denom.multiplier) {
+      nativeAmount = bns.mul(exchangeAmount, denom.multiplier)
+    } else {
+      throw new Error('ErrorDenomNotFound')
+    }
+
+    let rawTx: StellarTransaction
+    try {
+      rawTx = await tx.transaction()
+      networkFee = rawTx.fee_paid.toString()
+    } catch (e) {
+      console.log(e)
+      throw e
+    }
+
+    if (toAddress === this.walletLocalData.displayAddress) {
+      ourReceiveAddresses.push(fromAddress)
+    } else {
+      // This is a spend. Include fee in amount and make amount negative
+      nativeAmount = bns.add(nativeAmount, networkFee)
+      nativeAmount = '-' + nativeAmount
+    }
+    const edgeTransaction: EdgeTransaction = {
+      txid: tx.transaction_hash,
+      date,
+      currencyCode,
+      blockHeight: rawTx.ledger_attr, // API shows no ledger number ??
+      nativeAmount,
+      networkFee,
+      parentNetworkFee: '0',
+      ourReceiveAddresses,
+      signedTx: 'has_been_signed',
+      otherParams: {
+        fromAddress,
+        toAddress
+      }
+    }
+
+    this.addTransaction(currencyCode, edgeTransaction)
+    return tx.paging_token
   }
 
-  processTransaction (tx: StellarTransaction) {
-    // const ourReceiveAddresses:Array<string> = []
+  // Streaming version. Doesn't work in RN
+  // async checkTransactionsInnerLoop () {
+  //   const address = this.walletLocalData.displayAddress
+  //   const txHandler = (tx) => {
+  //     console.log('Got something:')
+  //     this.processTransaction(tx)
+  //   }
+  //   let close
+  //   const errorHandler = (e) => {
+  //     if (close) {
+  //       close()
+  //       close = null
+  //       this.checkTransactionsInnerLoop()
+  //     }
+  //   }
+  //   close = this.stellarServer.payments()
+  //     .forAccount(address)
+  //     .limit(TX_QUERY_PAGING_LIMIT)
+  //     .cursor(this.walletLocalData.otherData.lastPagingToken)
+  //     .stream({
+  //       onmessage: txHandler,
+  //       onerror: errorHandler
+  //     })
+  // }
 
-    // const balanceChanges = tx.outcome.balanceChanges[this.walletLocalData.displayAddress]
-    // if (balanceChanges) {
-    //   for (const bc of balanceChanges) {
-    //     const currencyCode: string = bc.currency
-    //     const date: number = Date.parse(tx.outcome.timestamp) / 1000
-    //     const blockHeight: number = tx.outcome.ledgerVersion
-
-    //     let exchangeAmount: string = bc.value
-    //     if (exchangeAmount.slice(0, 1) === '-') {
-    //       exchangeAmount = bns.add(tx.outcome.fee, exchangeAmount)
-    //     } else {
-    //       ourReceiveAddresses.push(this.walletLocalData.displayAddress)
-    //     }
-    //     const nativeAmount: string = bns.mul(exchangeAmount, '1000000')
-    //     let networkFee: string
-    //     let parentNetworkFee: string
-    //     if (currencyCode === PRIMARY_CURRENCY) {
-    //       networkFee = bns.mul(tx.outcome.fee, '1000000')
-    //     } else {
-    //       networkFee = '0'
-    //       parentNetworkFee = bns.mul(tx.outcome.fee, '1000000')
-    //     }
-
-    //     const edgeTransaction: EdgeTransaction = {
-    //       txid: tx.id.toLowerCase(),
-    //       date,
-    //       currencyCode,
-    //       blockHeight,
-    //       nativeAmount,
-    //       networkFee,
-    //       parentNetworkFee,
-    //       ourReceiveAddresses,
-    //       signedTx: 'has_been_signed',
-    //       otherParams: {}
-    //     }
-
-    //     const idx = this.findTransaction(currencyCode, edgeTransaction.txid)
-    //     if (idx === -1) {
-    //       this.log(sprintf('New transaction: %s', edgeTransaction.txid))
-
-    //       // New transaction not in database
-    //       this.addTransaction(currencyCode, edgeTransaction)
-    //     } else {
-    //       // Already have this tx in the database. See if anything changed
-    //       const transactionsArray = this.transactionList[ currencyCode ]
-    //       const edgeTx = transactionsArray[ idx ]
-
-    //       if (
-    //         edgeTx.blockHeight !== edgeTransaction.blockHeight ||
-    //         edgeTx.networkFee !== edgeTransaction.networkFee ||
-    //         edgeTx.nativeAmount !== edgeTransaction.nativeAmount
-    //       ) {
-    //         this.log(sprintf('Update transaction: %s height:%s',
-    //           edgeTransaction.txid,
-    //           edgeTransaction.blockHeight))
-    //         this.updateTransaction(currencyCode, edgeTransaction, idx)
-    //       } else {
-    //         // this.log(sprintf('Old transaction. No Update: %s', tx.hash))
-    //       }
-    //     }
-    //   }
-
-    //   if (this.transactionsChangedArray.length > 0) {
-    //     this.currencyEngineCallbacks.onTransactionsChanged(
-    //       this.transactionsChangedArray
-    //     )
-    //     this.transactionsChangedArray = []
-    //   }
-    // }
-  }
-
+  // Polling version
   async checkTransactionsInnerLoop () {
-    // const address = this.walletLocalData.displayAddress
-    // let startBlock:number = 0
-    // if (this.walletLocalData.lastAddressQueryHeight > ADDRESS_QUERY_LOOKBACK_BLOCKS) {
-    //   // Only query for transactions as far back as ADDRESS_QUERY_LOOKBACK_BLOCKS from the last time we queried transactions
-    //   startBlock = this.walletLocalData.lastAddressQueryHeight - ADDRESS_QUERY_LOOKBACK_BLOCKS
-    // }
-
-    // try {
-    //   let options
-    //   if (startBlock > ADDRESS_QUERY_LOOKBACK_BLOCKS) {
-    //     options = { minLedgerVersion: startBlock }
-    //   }
-    //   const transactions: StellarGetTransactions = await this.stellarApi.getTransactions(address, options)
-    //   const valid = validateObject(transactions, StellarGetTransactionsSchema)
-    //   if (valid) {
-    //     this.log('Fetched transactions count: ' + transactions.length)
-
-    //     // Get transactions
-    //     // Iterate over transactions in address
-    //     for (let i = 0; i < transactions.length; i++) {
-    //       const tx = transactions[i]
-    //       this.processRippleTransaction(tx)
-    //     }
-    //     this.updateOnAddressesChecked()
-    //   }
-    // } catch (e) {
-    //   console.log(e.code)
-    //   console.log(e.message)
-    //   console.log(e)
-    //   console.log(`Error fetching transactions: ${JSON.stringify(e)}`)
-    //   this.log(`Error fetching transactions: ${JSON.stringify(e)}`)
-    // }
+    const address = this.walletLocalData.displayAddress
+    let page
+    let pagingToken
+    while (1) {
+      try {
+        if (!page) {
+          page = await this.stellarServer
+            .payments()
+            .limit(TX_QUERY_PAGING_LIMIT)
+            .cursor(0)
+            .forAccount(address).call()
+        } else {
+          page = await page.next()
+        }
+        if (page.records.length === 0) {
+          break
+        }
+        for (const tx of page.records) {
+          pagingToken = await this.processTransaction(tx)
+        }
+      } catch (e) {
+        pagingToken = undefined
+      }
+    }
+    if (this.transactionsChangedArray.length > 0) {
+      this.currencyEngineCallbacks.onTransactionsChanged(
+        this.transactionsChangedArray
+      )
+      this.transactionsChangedArray = []
+    }
+    if (pagingToken) {
+      this.walletLocalData.otherData.pagingToken = pagingToken
+      this.walletLocalDataDirty = true
+      this.transactionsChecked = 1
+      this.updateOnAddressesChecked()
+    }
   }
 
   updateOnAddressesChecked () {
-    if (this.addressesChecked) {
+    if (this.addressesChecked === 1) {
       return
     }
-    this.addressesChecked = true
-    this.walletLocalData.lastAddressQueryHeight = this.walletLocalData.blockHeight
-    this.currencyEngineCallbacks.onAddressesChecked(1)
+    this.addressesChecked = (this.balancesChecked + this.transactionsChecked) / 2
+    this.currencyEngineCallbacks.onAddressesChecked(this.addressesChecked)
   }
 
   async checkUnconfirmedTransactionsFetch () {
@@ -199,29 +203,47 @@ export class StellarEngine extends CurrencyEngine {
 
   // Check all addresses for new transactions
   async checkAddressesInnerLoop () {
-    // const address = this.walletLocalData.displayAddress
-    // try {
-    //   const jsonObj = await this.stellarApi.getBalances(address)
-    //   const valid = validateObject(jsonObj, StellarGetBalancesSchema)
-    //   if (valid) {
-    //     for (const bal of jsonObj) {
-    //       const currencyCode = bal.currency
-    //       const exchangeAmount = bal.value
-    //       const nativeAmount = bns.mul(exchangeAmount, '1000000')
+    const address = this.walletLocalData.displayAddress
+    try {
+      const account: StellarAccount = await this.stellarServer.loadAccount(address)
+      for (const bal of account.balances) {
+        let currencyCode
+        if (bal.asset_type === 'native') {
+          currencyCode = this.currencyInfo.currencyCode
+          console.log('--Got balances--')
+        } else {
+          currencyCode = bal.asset_type
+        }
+        const denom = getDenomInfo(this.currencyInfo, currencyCode)
+        if (denom && denom.multiplier) {
+          const nativeAmount = bns.mul(bal.balance, denom.multiplier)
+          if (typeof this.walletLocalData.totalBalances[currencyCode] === 'undefined') {
+            this.walletLocalData.totalBalances[currencyCode] = '0'
+          }
 
-    //       if (typeof this.walletLocalData.totalBalances[currencyCode] === 'undefined') {
-    //         this.walletLocalData.totalBalances[currencyCode] = '0'
-    //       }
+          if (this.walletLocalData.totalBalances[currencyCode] !== nativeAmount) {
+            this.walletLocalData.totalBalances[currencyCode] = nativeAmount
+            this.currencyEngineCallbacks.onBalanceChanged(currencyCode, nativeAmount)
+          }
+        }
+      }
+      this.balancesChecked = 1
+    } catch (e) {
+      this.log(`Error fetching address info: ${JSON.stringify(e)}`)
+    }
+  }
 
-    //       if (this.walletLocalData.totalBalances[currencyCode] !== nativeAmount) {
-    //         this.walletLocalData.totalBalances[currencyCode] = nativeAmount
-    //         this.currencyEngineCallbacks.onBalanceChanged(currencyCode, nativeAmount)
-    //       }
-    //     }
-    //   }
-    // } catch (e) {
-    //   this.log(`Error fetching address info: ${JSON.stringify(e)}`)
-    // }
+  checkBlockchainInnerLoop () {
+    this.stellarServer.ledgers().order('desc').limit(1).call().then(r => {
+      const blockHeight = r.records[0].sequence
+      if (this.walletLocalData.blockHeight !== blockHeight) {
+        this.walletLocalData.blockHeight = blockHeight
+        this.walletLocalDataDirty = true
+        this.currencyEngineCallbacks.onBlockHeightChanged(this.walletLocalData.blockHeight)
+      }
+    }).catch(e => {
+      console.log(e)
+    })
   }
 
   // ****************************************************************************
@@ -233,22 +255,22 @@ export class StellarEngine extends CurrencyEngine {
   async startEngine () {
     this.engineOn = true
     this.doInitialCallbacks()
-    // await this.stellarApi.connect()
-    // this.addToLoop('checkServerInfoInnerLoop', BLOCKHEIGHT_POLL_MILLISECONDS)
-    // this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
-    // this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
-    // this.addToLoop('saveWalletLoop', SAVE_DATASTORE_MILLISECONDS)
+    this.stellarServer = new this.stellarApi.Server(this.currencyInfo.defaultSettings.otherSettings.stellarServers[0])
+
+    this.addToLoop('checkBlockchainInnerLoop', BLOCKCHAIN_POLL_MILLISECONDS)
+    this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
+    this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
+    this.addToLoop('saveWalletLoop', SAVE_DATASTORE_MILLISECONDS)
   }
 
   async killEngine () {
-    // // Set status flag to false
-    // this.engineOn = false
-    // // Clear Inner loops timers
-    // for (const timer in this.timers) {
-    //   clearTimeout(this.timers[timer])
-    // }
-    // this.timers = {}
-    // await this.stellarApi.disconnect()
+    // Set status flag to false
+    this.engineOn = false
+    // Clear Inner loops timers
+    for (const timer in this.timers) {
+      clearTimeout(this.timers[timer])
+    }
+    this.timers = {}
   }
 
   async resyncBlockchain (): Promise<void> {

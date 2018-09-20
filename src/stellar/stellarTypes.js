@@ -36,7 +36,8 @@ export type StellarPayment = {
   asset_type: string,
   from: string,
   to: string,
-  amount: string
+  amount: string,
+  transaction: Function
 }
 
 export type StellarCreateAccount = {
@@ -49,9 +50,16 @@ export type StellarCreateAccount = {
   source_account: string,
   account: string,
   starting_balance: string,
+  transaction: Function
 }
 
-export type StellarTransaction = StellarPayment | StellarCreateAccount
+export type StellarOperation = StellarPayment | StellarCreateAccount
 
+export type StellarTransaction = {
+  fee_paid: number,
+  memo_type: string,
+  ledger_attr: number
+}
 export type StellarWalletOtherData = {
+  lastPagingToken: string
 }

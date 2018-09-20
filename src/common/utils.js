@@ -4,6 +4,7 @@
  */
 
 import { validate } from 'jsonschema'
+import { type EdgeCurrencyInfo } from 'edge-core-js'
 
 function normalizeAddress (address: string) {
   return address.toLowerCase().replace('0x', '')
@@ -28,4 +29,10 @@ export function isHex (h: string) {
   return out
 }
 
-export { normalizeAddress, validateObject }
+function getDenomInfo (currencyInfo: EdgeCurrencyInfo, denom: string) {
+  return currencyInfo.denominations.find(element => {
+    return element.name === denom
+  })
+}
+
+export { normalizeAddress, validateObject, getDenomInfo }

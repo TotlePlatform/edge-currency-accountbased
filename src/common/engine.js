@@ -36,7 +36,7 @@ class CurrencyEngine {
   currencyEngineCallbacks: EdgeCurrencyEngineCallbacks
   walletLocalFolder: Object
   engineOn: boolean
-  addressesChecked: boolean // True once wallet has been fully checked on the network
+  addressesChecked: number // True once wallet has been fully checked on the network
   tokenCheckStatus: { [currencyCode: string]: number } // Each currency code can be a 0-1 value
   walletLocalData: WalletLocalData
   walletLocalDataDirty: boolean
@@ -60,7 +60,7 @@ class CurrencyEngine {
 
     this.io = io_
     this.engineOn = false
-    this.addressesChecked = false
+    this.addressesChecked = 0
     this.tokenCheckStatus = {}
     this.walletLocalDataDirty = false
     this.transactionsChangedArray = []
@@ -101,10 +101,9 @@ class CurrencyEngine {
   }
 
   findTransaction (currencyCode: string, txid: string) {
-    const normalizedTxid = normalizeAddress(txid)
     if (this.txIdMap[currencyCode]) {
-      const index = this.txIdMap[currencyCode][normalizedTxid]
-      if (index) {
+      const index = this.txIdMap[currencyCode][txid]
+      if (typeof index === 'number') {
         return index
       }
     }
@@ -117,27 +116,52 @@ class CurrencyEngine {
 
   addTransaction (currencyCode: string, edgeTransaction: EdgeTransaction) {
     // Add or update tx in transactionList
-    const idx = this.findTransaction(currencyCode, edgeTransaction.txid)
     const txid = normalizeAddress(edgeTransaction.txid)
+    const idx = this.findTransaction(currencyCode, txid)
 
+    let needsResort = false
     if (idx === -1) {
+      needsResort = true
       this.log('addTransaction: adding and sorting:' + edgeTransaction.txid)
       if (typeof this.transactionList[currencyCode] === 'undefined') {
         this.transactionList[currencyCode] = []
       }
       this.transactionList[currencyCode].push(edgeTransaction)
 
-      // Sort
-      this.transactionList[currencyCode].sort(this.sortTxByDate)
-
       this.transactionListDirty = true
       this.transactionsChangedArray.push(edgeTransaction)
-
-      // Add to txidMap
-      this.txIdMap[currencyCode][txid] = idx
-      this.updateTxidList(currencyCode)
     } else {
-      this.updateTransaction(currencyCode, edgeTransaction, idx)
+      // Already have this tx in the database. See if anything changed
+      const transactionsArray = this.transactionList[ currencyCode ]
+      const edgeTx = transactionsArray[ idx ]
+
+      if (
+        edgeTx.blockHeight !== edgeTransaction.blockHeight ||
+        edgeTx.networkFee !== edgeTransaction.networkFee ||
+        edgeTx.nativeAmount !== edgeTransaction.nativeAmount ||
+        edgeTx.date !== edgeTransaction.date
+      ) {
+        if (edgeTx.date !== edgeTransaction.date) {
+          needsResort = true
+        }
+        this.log(`Update transaction: ${edgeTransaction.txid} height:${edgeTransaction.blockHeight}`)
+        this.updateTransaction(currencyCode, edgeTransaction, idx)
+      } else {
+        // this.log(sprintf('Old transaction. No Update: %s', tx.hash))
+      }
+    }
+    if (needsResort) {
+      // Sort
+      this.transactionList[currencyCode].sort(this.sortTxByDate)
+      // Add to txidMap
+      const txIdList: Array<string> = []
+      let i = 0
+      for (const tx of this.transactionList[currencyCode]) {
+        this.txIdMap[currencyCode][tx.txid] = i
+        txIdList.push(normalizeAddress(tx.txid))
+        i++
+      }
+      this.txIdList[currencyCode] = txIdList
     }
   }
 
@@ -146,18 +170,8 @@ class CurrencyEngine {
     this.transactionList[currencyCode][idx] = edgeTransaction
     this.transactionList[currencyCode].sort(this.sortTxByDate)
     this.transactionListDirty = true
-    this.updateTxidList(currencyCode)
     this.transactionsChangedArray.push(edgeTransaction)
     this.log('updateTransaction:' + edgeTransaction.txid)
-  }
-
-  // Updates the txidList based on transactionList to keep it in chronological order
-  updateTxidList (currencyCode: string) {
-    const txIdList: Array<string> = []
-    for (const tx of this.transactionList[currencyCode]) {
-      txIdList.push(normalizeAddress(tx.txid))
-    }
-    this.txIdList[currencyCode] = txIdList
   }
 
   // *************************************

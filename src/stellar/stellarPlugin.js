@@ -48,7 +48,7 @@ export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
     }
 
     return {
-      pluginName: 'ripple',
+      pluginName: 'stellar',
       currencyInfo,
 
       createPrivateKey: (walletType: string) => {

@@ -181,7 +181,7 @@ export class EosEngine extends CurrencyEngine {
     if (this.addressesChecked) {
       return
     }
-    this.addressesChecked = true
+    this.addressesChecked = 1
     this.walletLocalData.lastAddressQueryHeight = this.walletLocalData.blockHeight
     this.currencyEngineCallbacks.onAddressesChecked(1)
   }
