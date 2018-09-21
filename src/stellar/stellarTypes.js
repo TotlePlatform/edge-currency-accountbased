@@ -61,5 +61,6 @@ export type StellarTransaction = {
   ledger_attr: number
 }
 export type StellarWalletOtherData = {
-  lastPagingToken: string
+  lastPagingToken: string,
+  accountSequence: number
 }

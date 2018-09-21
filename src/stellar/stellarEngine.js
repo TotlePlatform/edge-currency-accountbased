@@ -51,7 +51,6 @@ export class StellarEngine extends CurrencyEngine {
   balancesChecked: number
   transactionsChecked: number
   activatedAccountsCache: { [publicAddress: string ]: boolean }
-  accountSequence: number
   pendingTransactionsMap: { [txid: string ]: Object }
   otherData: StellarWalletOtherData
 
@@ -61,7 +60,6 @@ export class StellarEngine extends CurrencyEngine {
     this.balancesChecked = 0
     this.transactionsChecked = 0
     this.activatedAccountsCache = {}
-    this.accountSequence = 0
     this.pendingTransactionsMap = {}
   }
 
@@ -190,7 +188,7 @@ export class StellarEngine extends CurrencyEngine {
       this.transactionsChangedArray = []
     }
     if (pagingToken) {
-      this.otherData.pagingToken = pagingToken
+      this.otherData.lastPagingToken = pagingToken
       this.walletLocalDataDirty = true
       this.transactionsChecked = 1
       this.updateOnAddressesChecked()
@@ -214,8 +212,8 @@ export class StellarEngine extends CurrencyEngine {
     const address = this.walletLocalData.displayAddress
     try {
       const account: StellarAccount = await this.stellarServer.loadAccount(address)
-      if (account.sequence !== this.accountSequence) {
-        this.accountSequence = account.sequence
+      if (account.sequence !== this.otherData.accountSequence) {
+        this.otherData.accountSequence = account.sequence
       }
       for (const bal of account.balances) {
         let currencyCode
@@ -288,7 +286,7 @@ export class StellarEngine extends CurrencyEngine {
     this.balancesChecked = 0
     this.transactionsChecked = 0
     this.activatedAccountsCache = {}
-    this.accountSequence = 0
+    this.otherData.accountSequence = 0
     this.pendingTransactionsMap = {}
     await this.resyncBlockchainCommon()
     await this.startEngine()
@@ -395,7 +393,7 @@ export class StellarEngine extends CurrencyEngine {
     }
     const exchangeAmount = bns.div(nativeAmount, denom.multiplier, 7)
 
-    const account = new this.stellarApi.Account(this.walletLocalData.displayAddress, this.accountSequence)
+    const account = new this.stellarApi.Account(this.walletLocalData.displayAddress, this.otherData.accountSequence)
     const txBuilder = new this.stellarApi.TransactionBuilder(account)
     let transaction
 

@@ -287,10 +287,12 @@ class CurrencyEngine {
     })
     this.walletLocalData = new WalletLocalData(temp, this.currencyInfo.currencyCode)
     this.walletLocalDataDirty = true
+    this.addressesChecked = 0
     this.transactionList = {}
     this.txIdList = {}
     this.txIdMap = {}
     this.transactionListDirty = true
+    this.otherData = this.walletLocalData.otherData
     await this.saveWalletLoop()
   }
 
