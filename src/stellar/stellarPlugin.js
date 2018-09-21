@@ -62,7 +62,7 @@ export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
         const type = walletInfo.type.replace('wallet:', '')
         if (type === 'stellar') {
           const keypair = stellarApi.Keypair.fromSecret(walletInfo.keys.stellarKey)
-          return { displayAddress: keypair.publicKey() }
+          return { publicKey: keypair.publicKey() }
         } else {
           throw new Error('InvalidWalletType')
         }

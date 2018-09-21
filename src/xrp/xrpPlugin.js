@@ -74,8 +74,8 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
         const type = walletInfo.type.replace('wallet:', '')
         if (type === 'ripple' || type === 'ripple-secp256k1') {
           const keypair = keypairs.deriveKeypair(walletInfo.keys.rippleKey)
-          const displayAddress = keypairs.deriveAddress(keypair.publicKey)
-          return { displayAddress }
+          const publicKey = keypairs.deriveAddress(keypair.publicKey)
+          return { publicKey }
         } else {
           throw new Error('InvalidWalletType')
         }

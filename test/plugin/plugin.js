@@ -8,7 +8,7 @@ for (const fixture of fixtures) {
   const CurrencyPluginFactory = Factories[fixture['factory']]
   const WALLET_TYPE = fixture['WALLET_TYPE']
   const keyName = WALLET_TYPE.split('wallet:')[1].split('-')[0] + 'Key'
-  const address = 'displayAddress'
+  const address = 'publicKey'
 
   const opts = {
     io: {

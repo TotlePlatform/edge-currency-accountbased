@@ -103,7 +103,7 @@ export class StellarEngine extends CurrencyEngine {
       throw e
     }
 
-    if (toAddress === this.walletLocalData.displayAddress) {
+    if (toAddress === this.walletLocalData.publicKey) {
       ourReceiveAddresses.push(fromAddress)
     } else {
       // This is a spend. Include fee in amount and make amount negative
@@ -132,7 +132,7 @@ export class StellarEngine extends CurrencyEngine {
 
   // Streaming version. Doesn't work in RN
   // async checkTransactionsInnerLoop () {
-  //   const address = this.walletLocalData.displayAddress
+  //   const address = this.walletLocalData.publicKey
   //   const txHandler = (tx) => {
   //     console.log('Got something:')
   //     this.processTransaction(tx)
@@ -157,7 +157,7 @@ export class StellarEngine extends CurrencyEngine {
 
   // Polling version
   async checkTransactionsInnerLoop () {
-    const address = this.walletLocalData.displayAddress
+    const address = this.walletLocalData.publicKey
     let page
     let pagingToken
     while (1) {
@@ -209,7 +209,7 @@ export class StellarEngine extends CurrencyEngine {
 
   // Check all addresses for new transactions
   async checkAddressesInnerLoop () {
-    const address = this.walletLocalData.displayAddress
+    const address = this.walletLocalData.publicKey
     try {
       const account: StellarAccount = await this.stellarServer.loadAccount(address)
       if (account.sequence !== this.otherData.accountSequence) {
@@ -393,7 +393,7 @@ export class StellarEngine extends CurrencyEngine {
     }
     const exchangeAmount = bns.div(nativeAmount, denom.multiplier, 7)
 
-    const account = new this.stellarApi.Account(this.walletLocalData.displayAddress, this.otherData.accountSequence)
+    const account = new this.stellarApi.Account(this.walletLocalData.publicKey, this.otherData.accountSequence)
     let memoId:? string
     if (edgeSpendInfo.spendTargets[0].otherParams && edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier) {
       memoId = edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier
@@ -438,7 +438,7 @@ export class StellarEngine extends CurrencyEngine {
       signedTx: '0', // signedTx
       otherParams: {
         idInternal,
-        fromAddress: this.walletLocalData.displayAddress,
+        fromAddress: this.walletLocalData.publicKey,
         toAddress: publicAddress
       }
     }
@@ -447,7 +447,7 @@ export class StellarEngine extends CurrencyEngine {
 
     console.log('Stellar transaction prepared')
     console.log(`idInternal: ${idInternal}`)
-    console.log(`${nativeAmount} ${this.walletLocalData.displayAddress} -> ${publicAddress}`)
+    console.log(`${nativeAmount} ${this.walletLocalData.publicKey} -> ${publicAddress}`)
     return edgeTransaction
   }
 
@@ -503,8 +503,8 @@ export class StellarEngine extends CurrencyEngine {
   }
 
   getDisplayPublicSeed () {
-    if (this.walletInfo.keys && this.walletInfo.keys.displayAddress) {
-      return this.walletInfo.keys.displayAddress
+    if (this.walletInfo.keys && this.walletInfo.keys.publicKey) {
+      return this.walletInfo.keys.publicKey
     }
     return ''
   }

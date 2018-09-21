@@ -26,7 +26,7 @@ export type TransactionList = {[currencyCode: string]: Array<EdgeTransaction>}
 export class WalletLocalData {
   blockHeight: number
   lastAddressQueryHeight: number
-  displayAddress: string
+  publicKey: string
   totalBalances: {[currencyCode: string]: string}
   enabledTokens: Array<string>
   otherData: Object
@@ -37,14 +37,14 @@ export class WalletLocalData {
     this.totalBalances = totalBalances
     this.lastAddressQueryHeight = 0
     this.otherData = {}
-    this.displayAddress = ''
+    this.publicKey = ''
     this.enabledTokens = [ primaryCurrency ]
     if (jsonString !== null) {
       const data = JSON.parse(jsonString)
 
       if (typeof data.blockHeight === 'number') this.blockHeight = data.blockHeight
       if (typeof data.lastAddressQueryHeight === 'string') this.lastAddressQueryHeight = data.lastAddressQueryHeight
-      if (typeof data.displayAddress === 'string') this.displayAddress = data.displayAddress
+      if (typeof data.publicKey === 'string') this.publicKey = data.publicKey
       if (typeof data.totalBalances !== 'undefined') this.totalBalances = data.totalBalances
       if (typeof data.enabledTokens !== 'undefined') this.enabledTokens = data.enabledTokens
       if (typeof data.otherData !== 'undefined') this.otherData = data.otherData

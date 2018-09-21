@@ -28,13 +28,13 @@ export async function makeEngineCommon (currencyEngine: CurrencyEngine, plugin: 
   try {
     const result = await folder.file(DATA_STORE_FILE).getText()
     currencyEngine.walletLocalData = new WalletLocalData(result, currencyEngine.currencyInfo.currencyCode)
-    currencyEngine.walletLocalData.displayAddress = currencyEngine.walletInfo.keys.displayAddress
+    currencyEngine.walletLocalData.publicKey = currencyEngine.walletInfo.keys.publicKey
   } catch (err) {
     try {
       console.log(err)
       console.log('No walletLocalData setup yet: Failure is ok')
       currencyEngine.walletLocalData = new WalletLocalData(null, currencyEngine.currencyInfo.currencyCode)
-      currencyEngine.walletLocalData.displayAddress = currencyEngine.walletInfo.keys.displayAddress
+      currencyEngine.walletLocalData.publicKey = currencyEngine.walletInfo.keys.publicKey
       await folder.file(DATA_STORE_FILE)
         .setText(JSON.stringify(currencyEngine.walletLocalData))
     } catch (e) {

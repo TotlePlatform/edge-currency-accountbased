@@ -92,12 +92,12 @@ class CurrencyEngine {
     this.currencyEngineCallbacks = callbacks
     this.walletLocalFolder = walletLocalFolder
 
-    if (typeof this.walletInfo.keys.displayAddress !== 'string') {
-      if (walletInfo.keys.displayAddress) {
-        this.walletInfo.keys.displayAddress = walletInfo.keys.displayAddress
+    if (typeof this.walletInfo.keys.publicKey !== 'string') {
+      if (walletInfo.keys.publicKey) {
+        this.walletInfo.keys.publicKey = walletInfo.keys.publicKey
       } else {
         const pubKeys = currencyPlugin.derivePublicKey(this.walletInfo)
-        this.walletInfo.keys.displayAddress = pubKeys.displayAddress
+        this.walletInfo.keys.publicKey = pubKeys.publicKey
       }
     }
     this.log(`Created Wallet Type ${this.walletInfo.type} for Currency Plugin ${this.currencyInfo.pluginName}`)
@@ -283,7 +283,7 @@ class CurrencyEngine {
   async resyncBlockchainCommon (): Promise<void> {
     const temp = JSON.stringify({
       enabledTokens: this.walletLocalData.enabledTokens,
-      displayAddress: this.walletLocalData.displayAddress
+      publicKey: this.walletLocalData.publicKey
     })
     this.walletLocalData = new WalletLocalData(temp, this.currencyInfo.currencyCode)
     this.walletLocalDataDirty = true
@@ -520,7 +520,7 @@ class CurrencyEngine {
 
   // synchronous
   getFreshAddressCommon (options: any): EdgeFreshAddress {
-    return { publicAddress: this.walletLocalData.displayAddress }
+    return { publicAddress: this.walletLocalData.publicKey }
   }
 
   // synchronous

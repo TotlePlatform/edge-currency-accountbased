@@ -76,7 +76,7 @@ export const eosCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           // Multiple keys can be generated and stored if needed. Do not store an HD chain
           // but rather just different versions of the master public key
           // const publicKey = derivePubkey(walletInfo.keys.eosKey)
-          // const displayAddress = deriveAddress(walletInfo.keys.eosKey)
+          // const publicKey = deriveAddress(walletInfo.keys.eosKey)
           const publicKey = ecc.privateToPublic(walletInfo.keys.eosKey)
           const ownerPubKey = ecc.privateToPublic(walletInfo.keys.eosOwnerKey)
           return { publicKey, ownerPubKey }

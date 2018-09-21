@@ -43,6 +43,9 @@ const TRANSACTION_POLL_MILLISECONDS = 3000
 
 export class EosEngine extends CurrencyEngine {
   // TODO: Add currency specific params
+  // Store any per wallet specific data in the `currencyEngine` object. Add any params
+  // to the EosEngine class definition in eosEngine.js and initialize them in the
+  // constructor()
   eosApi: Object
   otherData: EosWalletOtherData
 
@@ -77,7 +80,7 @@ export class EosEngine extends CurrencyEngine {
   processEosTransaction (tx: EosGetTransaction) {
     // const ourReceiveAddresses:Array<string> = []
 
-    // const balanceChanges = tx.outcome.balanceChanges[this.walletLocalData.displayAddress]
+    // const balanceChanges = tx.outcome.balanceChanges[this.walletLocalData.publicKey]
     // if (balanceChanges) {
     //   for (const bc of balanceChanges) {
     //     const currencyCode: string = bc.currency
@@ -88,7 +91,7 @@ export class EosEngine extends CurrencyEngine {
     //     if (exchangeAmount.slice(0, 1) === '-') {
     //       exchangeAmount = bns.add(tx.outcome.fee, exchangeAmount)
     //     } else {
-    //       ourReceiveAddresses.push(this.walletLocalData.displayAddress)
+    //       ourReceiveAddresses.push(this.walletLocalData.publicKey)
     //     }
     //     const nativeAmount: string = bns.mul(exchangeAmount, '1000000')
     //     let networkFee: string
@@ -149,7 +152,7 @@ export class EosEngine extends CurrencyEngine {
   }
 
   async checkTransactionsInnerLoop () {
-    // const address = this.walletLocalData.displayAddress
+    // const address = this.walletLocalData.publicKey
     // let startBlock:number = 0
     // if (this.walletLocalData.lastAddressQueryHeight > ADDRESS_QUERY_LOOKBACK_BLOCKS) {
     //   // Only query for transactions as far back as ADDRESS_QUERY_LOOKBACK_BLOCKS from the last time we queried transactions
@@ -198,7 +201,7 @@ export class EosEngine extends CurrencyEngine {
 
   // Check all addresses for new transactions
   async checkAddressesInnerLoop () {
-    const address = this.walletLocalData.displayAddress
+    const address = this.walletLocalData.publicKey
     try {
       const jsonObj = await this.eosApi.getBalances(address)
       const valid = validateObject(jsonObj, EosGetBalancesSchema)
@@ -380,8 +383,8 @@ export class EosEngine extends CurrencyEngine {
   }
 
   getDisplayPublicSeed () {
-    if (this.walletInfo.keys && this.walletInfo.keys.displayAddress) {
-      return this.walletInfo.keys.displayAddress
+    if (this.walletInfo.keys && this.walletInfo.keys.publicKey) {
+      return this.walletInfo.keys.publicKey
     }
     return ''
   }
