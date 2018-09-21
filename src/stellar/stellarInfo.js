@@ -26,7 +26,7 @@ export const currencyInfo: EdgeCurrencyInfo = {
   defaultSettings,
 
   addressExplorer: 'https://stellarchain.io/address/%s',
-  transactionExplorer: 'https://stellarchain.io/address/tx/%s',
+  transactionExplorer: 'https://stellarchain.io/tx/%s',
 
   denominations: [
     // An array of Objects of the possible denominations for this currency
