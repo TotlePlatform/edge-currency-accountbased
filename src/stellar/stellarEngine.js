@@ -394,6 +394,10 @@ export class StellarEngine extends CurrencyEngine {
     const exchangeAmount = bns.div(nativeAmount, denom.multiplier, 7)
 
     const account = new this.stellarApi.Account(this.walletLocalData.displayAddress, this.otherData.accountSequence)
+    let memoId:? string
+    if (edgeSpendInfo.spendTargets[0].otherParams && edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier) {
+      memoId = edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier
+    }
     const txBuilder = new this.stellarApi.TransactionBuilder(account)
     let transaction
 
@@ -401,14 +405,19 @@ export class StellarEngine extends CurrencyEngine {
       transaction = txBuilder.addOperation(this.stellarApi.Operation.createAccount({
         destination: publicAddress,
         startingBalance: exchangeAmount
-      })).build()
+      }))
     } else {
       transaction = txBuilder.addOperation(this.stellarApi.Operation.payment({
         destination: publicAddress,
         asset: this.stellarApi.Asset.native(),
         amount: exchangeAmount
-      })).build()
+      }))
     }
+    if (memoId) {
+      const memo = this.stellarApi.Memo.id(memoId)
+      transaction = transaction.addMemo(memo)
+    }
+    transaction = transaction.build()
 
     const networkFee = transaction.fee.toString()
     nativeAmount = bns.add(networkFee, nativeAmount) // Add fee to total
