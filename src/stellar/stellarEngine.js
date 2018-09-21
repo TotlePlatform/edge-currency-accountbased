@@ -361,17 +361,17 @@ export class StellarEngine extends CurrencyEngine {
     }
 
     // Check if destination address is activated
-    let mustCreateAccout = false
+    let mustCreateAccount = false
     const activated = this.activatedAccountsCache[publicAddress]
     if (activated === false) {
-      mustCreateAccout = true
+      mustCreateAccount = true
     } else if (activated === undefined) {
       try {
         await this.stellarServer.loadAccount(publicAddress)
         this.activatedAccountsCache[publicAddress] = true
       } catch (e) {
         this.activatedAccountsCache[publicAddress] = false
-        mustCreateAccout = true
+        mustCreateAccount = true
       }
     }
 
@@ -401,7 +401,7 @@ export class StellarEngine extends CurrencyEngine {
     const txBuilder = new this.stellarApi.TransactionBuilder(account)
     let transaction
 
-    if (mustCreateAccout) {
+    if (mustCreateAccount) {
       transaction = txBuilder.addOperation(this.stellarApi.Operation.createAccount({
         destination: publicAddress,
         startingBalance: exchangeAmount
@@ -426,7 +426,7 @@ export class StellarEngine extends CurrencyEngine {
       throw (new error.InsufficientFundsError())
     }
 
-    const idInternal = Array.from(this.io.random(32)).toString()
+    const idInternal = Buffer.from(this.io.random(32)).toString('hex')
     const edgeTransaction: EdgeTransaction = {
       txid: '', // txid
       date: 0, // date
@@ -445,7 +445,9 @@ export class StellarEngine extends CurrencyEngine {
     this.pendingTransactionsMap = {}
     this.pendingTransactionsMap[idInternal] = transaction
 
-    console.log('Payment transaction prepared...')
+    console.log('Stellar transaction prepared')
+    console.log(`idInternal: ${idInternal}`)
+    console.log(`${nativeAmount} ${this.walletLocalData.displayAddress} -> ${publicAddress}`)
     return edgeTransaction
   }
 
