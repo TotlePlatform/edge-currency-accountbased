@@ -10,15 +10,20 @@ Implements Bitcoin send/receive functionality per the spec for crypto currency p
     npm i edge-currency-accountbased -s
 
 ```
-import { eosCurrencyPluginFactory } from `edge-currency-accountbased`
+import { stellarCurrencyPluginFactory } from `edge-currency-accountbased`
+import { rippleCurrencyPluginFactory } from `edge-currency-accountbased`
 ```
 
-Now you can pass `eosCurrencyPluginFactory` to `edge-core-js`.
+Now you can pass plugins to `edge-core-js`.
 
 ```
+const plugins = [
+    stellarCurrencyPluginFactory,
+    rippleCurrencyPluginFactory
+]
 const context = makeEdgeContext({
   apiKey: YOUR_API_KEY,
-  plugins: [ eosCurrencyPluginFactory ]
+  plugins
 })
 ```
 
