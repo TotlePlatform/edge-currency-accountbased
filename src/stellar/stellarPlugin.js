@@ -15,6 +15,7 @@ import type {
 // import { RippleAPI } from 'edge-ripple-lib'
 import { bns } from 'biggystring'
 import { serialize } from 'uri-js'
+import { getDenomInfo } from '../common/utils.js'
 import parse from 'url-parse'
 
 import stellarApi from 'stellar-sdk'
@@ -23,12 +24,6 @@ import { StellarEngine } from './stellarEngine.js'
 const URI_PREFIX = 'web+stellar'
 
 let io
-
-function getDenomInfo (denom: string) {
-  return currencyInfo.denominations.find(element => {
-    return element.name === denom
-  })
-}
 
 export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
   pluginType: 'currency',
@@ -111,7 +106,7 @@ export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
         const amountStr = parsedUri.query.amount
         if (amountStr && typeof amountStr === 'string') {
-          const denom = getDenomInfo('XLM')
+          const denom = getDenomInfo(this.currencyInfo, 'XLM')
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
@@ -153,7 +148,7 @@ export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           if (typeof obj.currencyCode === 'string') {
             currencyCode = obj.currencyCode
           }
-          const denom = getDenomInfo(currencyCode)
+          const denom = getDenomInfo(this.currencyInfo, currencyCode)
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }

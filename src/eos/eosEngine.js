@@ -25,6 +25,9 @@ import {
   // EosGetBlockchainInfoSchema
 } from './eosSchema.js'
 import {
+  MakeSpendSchema
+} from '../common/schema.js'
+import {
   CurrencyEngine
 } from '../common/engine.js'
 import { validateObject } from '../common/utils.js'
@@ -34,7 +37,7 @@ import {
 } from './eosTypes.js'
 
 const ADDRESS_POLL_MILLISECONDS = 10000
-const BLOCKHEIGHT_POLL_MILLISECONDS = 15000
+const BLOCKCHAIN_POLL_MILLISECONDS = 15000
 const TRANSACTION_POLL_MILLISECONDS = 3000
 // const ADDRESS_QUERY_LOOKBACK_BLOCKS = (30 * 60) // ~ one minute
 
@@ -226,9 +229,10 @@ export class EosEngine extends CurrencyEngine {
 
   updateSettings (settings: any) { this.updateSettingsCommon(settings) }
 
+  // This routine is called once a wallet needs to start querying the network
   async startEngine () {
     this.engineOn = true
-    this.addToLoop('checkServerInfoInnerLoop', BLOCKHEIGHT_POLL_MILLISECONDS)
+    this.addToLoop('checkBlockchainInnerLoop', BLOCKCHAIN_POLL_MILLISECONDS)
     this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
     this.startEngineCommon()
@@ -292,128 +296,43 @@ export class EosEngine extends CurrencyEngine {
   // synchronous
   async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
     // // Validate the spendInfo
-    // const valid = validateObject(edgeSpendInfo, {
-    //   'type': 'object',
-    //   'properties': {
-    //     'currencyCode': { 'type': 'string' },
-    //     'networkFeeOption': { 'type': 'string' },
-    //     'spendTargets': {
-    //       'type': 'array',
-    //       'items': {
-    //         'type': 'object',
-    //         'properties': {
-    //           'currencyCode': { 'type': 'string' },
-    //           'publicAddress': { 'type': 'string' },
-    //           'nativeAmount': { 'type': 'string' },
-    //           'destMetadata': { 'type': 'object' },
-    //           'destWallet': { 'type': 'object' }
-    //         },
-    //         'required': [
-    //           'publicAddress'
-    //         ]
-    //       }
-    //     }
-    //   },
-    //   'required': [ 'spendTargets' ]
-    // })
+    const valid = validateObject(edgeSpendInfo, MakeSpendSchema)
 
-    // if (!valid) {
-    //   throw (new Error('Error: invalid ABCSpendInfo'))
-    // }
+    if (!valid) {
+      throw (new Error('Error: invalid EdgeSpendInfo'))
+    }
 
-    // if (edgeSpendInfo.spendTargets.length !== 1) {
-    //   throw (new Error('Error: only one output allowed'))
-    // }
+    // TODO: Validate the number of destination targets supported by this currency.
+    // ie. Bitcoin can do multiple targets. Ethereum only one
+    // edgeSpendInfo.spendTargets.length
 
-    // // let tokenInfo = {}
-    // // tokenInfo.contractAddress = ''
-    // //
-    // let currencyCode: string = ''
-    // if (typeof edgeSpendInfo.currencyCode === 'string') {
-    //   currencyCode = edgeSpendInfo.currencyCode
-    // } else {
-    //   currencyCode = 'XRP'
-    // }
-    // edgeSpendInfo.currencyCode = currencyCode
+    // TODO: Validate for valid currencyCode which will be in
+    // edgeSpendInfo.currencyCode if specified by user. Otherwise use native currency
 
-    // let publicAddress = ''
-
-    // if (typeof edgeSpendInfo.spendTargets[0].publicAddress === 'string') {
-    //   publicAddress = edgeSpendInfo.spendTargets[0].publicAddress
-    // } else {
-    //   throw new Error('No valid spendTarget')
-    // }
-
-    // let nativeAmount = '0'
-    // if (typeof edgeSpendInfo.spendTargets[0].nativeAmount === 'string') {
-    //   nativeAmount = edgeSpendInfo.spendTargets[0].nativeAmount
-    // } else {
-    //   throw (new Error('Error: no amount specified'))
-    // }
-
+    // TODO: Get nativeAmount which is denoted is small currency unit. ie satoshi/wei
+    // edgeSpendInfo.spendTargets[0].nativeAmount
+    //
+    // Throw if this currency cannot spend a 0 amount
     // if (bns.eq(nativeAmount, '0')) {
     //   throw (new error.NoAmountSpecifiedError())
     // }
 
+    // TODO: Get current wallet balance and make sure there are sufficient funds including fees
     // const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
-    // const nativeNetworkFee = bns.mul(this.walletLocalData.recommendedFee, '1000000')
 
-    // if (currencyCode === PRIMARY_CURRENCY) {
-    //   const totalTxAmount = bns.add(nativeNetworkFee, nativeAmount)
-    //   const virtualTxAmount = bns.add(totalTxAmount, '20000000')
-    //   if (bns.gt(virtualTxAmount, nativeBalance)) {
-    //     throw new error.InsufficientFundsError()
-    //   }
-    // }
+    // TODO: Extract unique identifier for this transaction. This is known as a Payment ID for
+    // Monero, Destination Tag for Ripple, and Memo ID for Stellar. Use if currency is capable
+    // edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier
 
-    // const exchangeAmount = bns.div(nativeAmount, '1000000', 6)
-    // let uniqueIdentifier
-    // if (
-    //   edgeSpendInfo.spendTargets[0].otherParams &&
-    //   edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier
-    // ) {
-    //   if (typeof edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier === 'string') {
-    //     uniqueIdentifier = parseInt(edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier)
-    //   } else {
-    //     throw new Error('Error invalid destinationtag')
-    //   }
-    // }
-    // const payment = {
-    //   source: {
-    //     address: this.walletLocalData.displayAddress,
-    //     maxAmount: {
-    //       value: exchangeAmount,
-    //       currency: currencyCode
-    //     }
-    //   },
-    //   destination: {
-    //     address: publicAddress,
-    //     amount: {
-    //       value: exchangeAmount,
-    //       currency: currencyCode
-    //     },
-    //     tag: uniqueIdentifier
-    //   }
-    // }
-
-    // let preparedTx = {}
-    // try {
-    //   preparedTx = await this.eosApi.preparePayment(
-    //     this.walletLocalData.displayAddress,
-    //     payment,
-    //     { maxLedgerVersionOffset: 300 }
-    //   )
-    // } catch (err) {
-    //   console.log(err)
-    //   throw new Error('Error in preparePayment')
-    // }
-
-    // const otherParams: RippleParams = {
-    //   preparedTx
-    // }
-
-    // nativeAmount = '-' + nativeAmount
-
+    // TODO: Create an EdgeTransaction object with the following params filled out:
+    // currencyCode
+    // blockHeight = 0
+    // nativeAmount (which includes fee)
+    // networkFee (in smallest unit of currency)
+    // ourReceiveAddresses = []
+    // signedTx = ''
+    // otherParams. Object declared in this currency's types.js file (ie. eosTypes.js) 
+    //  which are additional params useful for signing and broadcasting transaction 
     const edgeTransaction: EdgeTransaction = {
       txid: '', // txid
       date: 0, // date
@@ -433,22 +352,20 @@ export class EosEngine extends CurrencyEngine {
   // asynchronous
   async signTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
     // Do signing
-    const txJson = edgeTransaction.otherParams.preparedTx.txJSON
-    const privateKey = this.walletInfo.keys.rippleKey
+    // Take the private key from this.walletInfo.keys.eosKey and sign the transaction
+    // const privateKey = this.walletInfo.keys.rippleKey
 
-    const { signedTransaction, id } = this.eosApi.sign(txJson, privateKey)
-    console.log('Payment transaction signed...')
+    // If signed data is in string format, add to edgeTransaction.signedTx
+    // Otherwise utilize otherParams
 
-    edgeTransaction.signedTx = signedTransaction
-    edgeTransaction.txid = id.toLowerCase()
-    edgeTransaction.date = Date.now() / 1000
-
+    // Complete edgeTransaction.txid params if possible at this state
     return edgeTransaction
   }
 
   // asynchronous
   async broadcastTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
-    await this.eosApi.submit(edgeTransaction.signedTx)
+    // Broadcast transaction and add date
+    // edgeTransaction.data = Date.now() / 1000
     return edgeTransaction
   }
 
@@ -457,7 +374,7 @@ export class EosEngine extends CurrencyEngine {
 
   getDisplayPrivateSeed () {
     if (this.walletInfo.keys && this.walletInfo.keys.rippleKey) {
-      return this.walletInfo.keys.rippleKey
+      return this.walletInfo.keys.eosKey
     }
     return ''
   }

@@ -12,6 +12,7 @@ import type {
   EdgeCurrencyPluginFactory,
   EdgeWalletInfo
 } from 'edge-core-js'
+import { getDenomInfo } from '../common/utils.js'
 import { bns } from 'biggystring'
 import baseX from 'base-x'
 import keypairs from 'edge-ripple-keypairs'
@@ -25,12 +26,6 @@ const base58Codec = baseX(
 )
 
 let io
-
-function getDenomInfo (denom: string) {
-  return currencyInfo.denominations.find(element => {
-    return element.name === denom
-  })
-}
 
 function checkAddress (address: string): boolean {
   let data: Uint8Array
@@ -127,7 +122,7 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
         const amountStr = parsedUri.query.amount
         if (amountStr && typeof amountStr === 'string') {
-          const denom = getDenomInfo('XRP')
+          const denom = getDenomInfo(this.currencyInfo, 'XRP')
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
@@ -159,7 +154,7 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           if (typeof obj.currencyCode === 'string') {
             currencyCode = obj.currencyCode
           }
-          const denom = getDenomInfo(currencyCode)
+          const denom = getDenomInfo(this.currencyInfo, currencyCode)
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
