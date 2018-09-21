@@ -207,8 +207,8 @@ export class StellarEngine extends CurrencyEngine {
 
   }
 
-  // Check all addresses for new transactions
-  async checkAddressesInnerLoop () {
+  // Check all account balance and other relevant info
+  async checkAccountInnerLoop () {
     const address = this.walletLocalData.publicKey
     try {
       const account: StellarAccount = await this.stellarServer.loadAccount(address)
@@ -266,7 +266,7 @@ export class StellarEngine extends CurrencyEngine {
     this.stellarServer = new this.stellarApi.Server(this.currencyInfo.defaultSettings.otherSettings.stellarServers[0])
 
     this.addToLoop('checkBlockchainInnerLoop', BLOCKCHAIN_POLL_MILLISECONDS)
-    this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
+    this.addToLoop('checkAccountInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
     this.startEngineCommon()
   }

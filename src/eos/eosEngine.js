@@ -55,7 +55,6 @@ export class EosEngine extends CurrencyEngine {
   }
 
   // Poll on the blockheight
-  async checkServerInfoInnerLoop () {
     // try {
     //   const fee = await this.eosApi.getFee()
     //   if (typeof fee === 'string') {
@@ -75,9 +74,10 @@ export class EosEngine extends CurrencyEngine {
     // } catch (err) {
     //   this.log(`Error fetching height: ${JSON.stringify(err)}`)
     // }
+  async checkBlockchainInnerLoop () {
   }
 
-  processEosTransaction (tx: EosGetTransaction) {
+  processTransaction (tx: EosGetTransaction) {
     // const ourReceiveAddresses:Array<string> = []
 
     // const balanceChanges = tx.outcome.balanceChanges[this.walletLocalData.publicKey]
@@ -173,7 +173,7 @@ export class EosEngine extends CurrencyEngine {
     //     // Iterate over transactions in address
     //     for (let i = 0; i < transactions.length; i++) {
     //       const tx = transactions[i]
-    //       this.processEosTransaction(tx)
+    //       this.processTransaction(tx)
     //     }
     //     this.updateOnAddressesChecked()
     //   }
@@ -199,8 +199,8 @@ export class EosEngine extends CurrencyEngine {
 
   }
 
-  // Check all addresses for new transactions
-  async checkAddressesInnerLoop () {
+  // Check all account balance and other relevant info
+  async checkAccountInnerLoop () {
     const address = this.walletLocalData.publicKey
     try {
       const jsonObj = await this.eosApi.getBalances(address)
@@ -236,7 +236,7 @@ export class EosEngine extends CurrencyEngine {
   async startEngine () {
     this.engineOn = true
     this.addToLoop('checkBlockchainInnerLoop', BLOCKCHAIN_POLL_MILLISECONDS)
-    this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
+    this.addToLoop('checkAccountInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
     this.startEngineCommon()
   }

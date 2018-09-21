@@ -179,8 +179,8 @@ export class XrpEngine extends CurrencyEngine {
 
   }
 
-  // Check all addresses for new transactions
-  async checkAddressesInnerLoop () {
+  // Check all account balance and other relevant info
+  async checkAccountInnerLoop () {
     const address = this.walletLocalData.publicKey
     try {
       const jsonObj = await this.rippleApi.getBalances(address)
@@ -216,7 +216,7 @@ export class XrpEngine extends CurrencyEngine {
     this.engineOn = true
     await this.rippleApi.connect()
     this.addToLoop('checkServerInfoInnerLoop', BLOCKHEIGHT_POLL_MILLISECONDS)
-    this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
+    this.addToLoop('checkAccountInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
     this.startEngineCommon()
   }
