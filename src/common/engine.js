@@ -53,6 +53,7 @@ class CurrencyEngine {
   timers: any
   walletId: string
   io: EdgeIo
+  otherData: Object
 
   constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     const currencyCode = currencyPlugin.currencyInfo.currencyCode

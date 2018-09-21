@@ -28,17 +28,20 @@ import {
   CurrencyEngine
 } from '../common/engine.js'
 import { validateObject } from '../common/utils.js'
-import type { EosGetTransaction } from './eosTypes.js'
+import {
+  type EosGetTransaction,
+  type EosWalletOtherData
+} from './eosTypes.js'
 
 const ADDRESS_POLL_MILLISECONDS = 10000
 const BLOCKHEIGHT_POLL_MILLISECONDS = 15000
 const TRANSACTION_POLL_MILLISECONDS = 3000
-const SAVE_DATASTORE_MILLISECONDS = 10000
 // const ADDRESS_QUERY_LOOKBACK_BLOCKS = (30 * 60) // ~ one minute
 
 export class EosEngine extends CurrencyEngine {
   // TODO: Add currency specific params
   eosApi: Object
+  otherData: EosWalletOtherData
 
   constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     super(currencyPlugin, io_, walletInfo, opts)

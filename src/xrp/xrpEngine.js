@@ -28,7 +28,8 @@ import {
 } from './xrpSchema.js'
 import {
   type XrpGetTransaction,
-  type XrpGetTransactions
+  type XrpGetTransactions,
+  type XrpWalletOtherData
 } from './xrpTypes.js'
 import {
   CurrencyEngine
@@ -51,6 +52,7 @@ type XrpParams = {
 export class XrpEngine extends CurrencyEngine {
   // TODO: Add currency specific params
   rippleApi: Object
+  otherData: XrpWalletOtherData
 
   constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     super(currencyPlugin, io_, walletInfo, opts)
@@ -62,7 +64,7 @@ export class XrpEngine extends CurrencyEngine {
     try {
       const fee = await this.rippleApi.getFee()
       if (typeof fee === 'string') {
-        this.walletLocalData.otherData.recommendedFee = fee
+        this.otherData.recommendedFee = fee
         this.walletLocalDataDirty = true
       }
       const jsonObj = await this.rippleApi.getServerInfo()
@@ -344,7 +346,7 @@ export class XrpEngine extends CurrencyEngine {
     }
 
     const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
-    const nativeNetworkFee = bns.mul(this.walletLocalData.otherData.recommendedFee, '1000000')
+    const nativeNetworkFee = bns.mul(this.otherData.recommendedFee, '1000000')
 
     if (currencyCode === PRIMARY_CURRENCY) {
       const totalTxAmount = bns.add(nativeNetworkFee, nativeAmount)

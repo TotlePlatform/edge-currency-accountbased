@@ -80,7 +80,10 @@ export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
         await makeEngineCommon(currencyEngine, this, io, walletInfo, opts)
 
-        // TODO: Initialize anything specific to this currency
+        // This is just to make sure otherData is Flow type checked
+        currencyEngine.otherData = currencyEngine.walletLocalData.otherData
+        if (!currencyEngine.otherData.accountSequence) currencyEngine.otherData.accountSequence = 0
+        if (!currencyEngine.otherData.lastPagingToken) currencyEngine.otherData.lastPagingToken = '0'
 
         const out: EdgeCurrencyEngine = currencyEngine
         return out

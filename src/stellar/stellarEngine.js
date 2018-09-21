@@ -31,7 +31,8 @@ import { MakeSpendSchema } from '../common/schema.js'
 import {
   type StellarAccount,
   type StellarOperation,
-  type StellarTransaction
+  type StellarTransaction,
+  type StellarWalletOtherData
 } from './stellarTypes.js'
 import {
   CurrencyEngine
@@ -53,6 +54,7 @@ export class StellarEngine extends CurrencyEngine {
   activatedAccountsCache: { [publicAddress: string ]: boolean }
   accountSequence: number
   pendingTransactionsMap: { [txid: string ]: Object }
+  otherData: StellarWalletOtherData
 
   constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     super(currencyPlugin, io_, walletInfo, opts)
@@ -149,7 +151,7 @@ export class StellarEngine extends CurrencyEngine {
   //   close = this.stellarServer.payments()
   //     .forAccount(address)
   //     .limit(TX_QUERY_PAGING_LIMIT)
-  //     .cursor(this.walletLocalData.otherData.lastPagingToken)
+  //     .cursor(this.otherData.lastPagingToken)
   //     .stream({
   //       onmessage: txHandler,
   //       onerror: errorHandler
@@ -167,7 +169,7 @@ export class StellarEngine extends CurrencyEngine {
           page = await this.stellarServer
             .payments()
             .limit(TX_QUERY_PAGING_LIMIT)
-            .cursor(this.walletLocalData.otherData.lastPagingToken)
+            .cursor(this.otherData.lastPagingToken)
             .forAccount(address).call()
         } else {
           page = await page.next()
@@ -189,7 +191,7 @@ export class StellarEngine extends CurrencyEngine {
       this.transactionsChangedArray = []
     }
     if (pagingToken) {
-      this.walletLocalData.otherData.pagingToken = pagingToken
+      this.otherData.pagingToken = pagingToken
       this.walletLocalDataDirty = true
       this.transactionsChecked = 1
       this.updateOnAddressesChecked()
@@ -472,6 +474,8 @@ export class StellarEngine extends CurrencyEngine {
       edgeTransaction.txid = result.hash
       edgeTransaction.date = Date.now() / 1000
       this.activatedAccountsCache[edgeTransaction.otherParams.toAddress] = true
+      this.otherData.accountSequence++
+      this.walletLocalDataDirty = true
     } catch (e) {
       console.log(e)
     }

@@ -94,8 +94,11 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
         await makeEngineCommon(currencyEngine, this, io, walletInfo, opts)
 
-        if (!currencyEngine.walletLocalData.otherData.recommendedFee) {
-          currencyEngine.walletLocalData.otherData.recommendedFee = '0'
+        // This is just to make sure otherData is Flow type checked
+        currencyEngine.otherData = currencyEngine.walletLocalData.otherData
+
+        if (!currencyEngine.otherData.recommendedFee) {
+          currencyEngine.otherData.recommendedFee = '0'
         }
 
         // TODO: Initialize anything specific to this currency

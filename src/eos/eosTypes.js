@@ -21,3 +21,6 @@ export type EosGetTransaction = {
   //   }
   // }
 }
+
+export type EosWalletOtherData = {
+}
