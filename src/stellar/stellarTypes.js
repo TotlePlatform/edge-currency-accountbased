@@ -16,7 +16,7 @@ export type StellarBalance = {
 
 export type StellarAccount = {
   id: string,
-  sequence: string,
+  sequence: number,
   balances: Array<StellarBalance>
 }
 

@@ -18,7 +18,7 @@ import type {
   // EdgeDenomination,
   // EdgeIo
 } from 'edge-core-js'
-// import { error } from 'edge-core-js'
+import { error } from 'edge-core-js'
 // import { sprintf } from 'sprintf-js'
 
 import { bns } from 'biggystring'
@@ -27,6 +27,7 @@ import { bns } from 'biggystring'
 //   StellarGetBalancesSchema,
 //   StellarGetTransactionsSchema
 // } from './stellarSchema.js'
+import { MakeSpendSchema } from '../common/schema.js'
 import {
   type StellarAccount,
   type StellarOperation,
@@ -49,12 +50,18 @@ export class StellarEngine extends CurrencyEngine {
   stellarServer: Object
   balancesChecked: number
   transactionsChecked: number
+  activatedAccountsCache: { [publicAddress: string ]: boolean }
+  accountSequence: number
+  pendingTransactionsMap: { [txid: string ]: Object }
 
   constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     super(currencyPlugin, io_, walletInfo, opts)
     this.stellarApi = {}
     this.balancesChecked = 0
     this.transactionsChecked = 0
+    this.activatedAccountsCache = {}
+    this.accountSequence = 0
+    this.pendingTransactionsMap = {}
   }
 
   async processTransaction (tx: StellarOperation): Promise<string> {
@@ -160,7 +167,7 @@ export class StellarEngine extends CurrencyEngine {
           page = await this.stellarServer
             .payments()
             .limit(TX_QUERY_PAGING_LIMIT)
-            .cursor(0)
+            .cursor(this.walletLocalData.otherData.lastPagingToken)
             .forAccount(address).call()
         } else {
           page = await page.next()
@@ -206,6 +213,9 @@ export class StellarEngine extends CurrencyEngine {
     const address = this.walletLocalData.displayAddress
     try {
       const account: StellarAccount = await this.stellarServer.loadAccount(address)
+      if (account.sequence !== this.accountSequence) {
+        this.accountSequence = account.sequence
+      }
       for (const bal of account.balances) {
         let currencyCode
         if (bal.asset_type === 'native') {
@@ -275,6 +285,11 @@ export class StellarEngine extends CurrencyEngine {
 
   async resyncBlockchain (): Promise<void> {
     await this.killEngine()
+    this.balancesChecked = 0
+    this.transactionsChecked = 0
+    this.activatedAccountsCache = {}
+    this.accountSequence = 0
+    this.pendingTransactionsMap = {}
     await this.resyncBlockchainCommon()
     await this.startEngine()
   }
@@ -321,139 +336,106 @@ export class StellarEngine extends CurrencyEngine {
   // synchronous
   async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
     // Validate the spendInfo
-    const valid = validateObject(edgeSpendInfo, {
-      'type': 'object',
-      'properties': {
-        'currencyCode': { 'type': 'string' },
-        'networkFeeOption': { 'type': 'string' },
-        'spendTargets': {
-          'type': 'array',
-          'items': {
-            'type': 'object',
-            'properties': {
-              'currencyCode': { 'type': 'string' },
-              'publicAddress': { 'type': 'string' },
-              'nativeAmount': { 'type': 'string' },
-              'destMetadata': { 'type': 'object' },
-              'destWallet': { 'type': 'object' }
-            },
-            'required': [
-              'publicAddress'
-            ]
-          }
-        }
-      },
-      'required': [ 'spendTargets' ]
-    })
+    const valid = validateObject(edgeSpendInfo, MakeSpendSchema)
 
     if (!valid) {
-      throw (new Error('Error: invalid ABCSpendInfo'))
+      throw (new Error('Error: invalid EdgeSpendInfo'))
     }
 
     if (edgeSpendInfo.spendTargets.length !== 1) {
       throw (new Error('Error: only one output allowed'))
     }
 
-    // let tokenInfo = {}
-    // tokenInfo.contractAddress = ''
-    //
-    // let currencyCode: string = ''
-    // if (typeof edgeSpendInfo.currencyCode === 'string') {
-    //   currencyCode = edgeSpendInfo.currencyCode
-    // } else {
-    //   currencyCode = 'XLM'
-    // }
-    // edgeSpendInfo.currencyCode = currencyCode
+    let currencyCode: string = ''
+    if (typeof edgeSpendInfo.currencyCode === 'string') {
+      currencyCode = edgeSpendInfo.currencyCode
+    } else {
+      currencyCode = 'XLM'
+    }
+    edgeSpendInfo.currencyCode = currencyCode
 
-    // let publicAddress = ''
+    let publicAddress = ''
 
-    // if (typeof edgeSpendInfo.spendTargets[0].publicAddress === 'string') {
-    //   publicAddress = edgeSpendInfo.spendTargets[0].publicAddress
-    // } else {
-    //   throw new Error('No valid spendTarget')
-    // }
+    if (typeof edgeSpendInfo.spendTargets[0].publicAddress === 'string') {
+      publicAddress = edgeSpendInfo.spendTargets[0].publicAddress
+    } else {
+      throw new Error('No valid spendTarget')
+    }
 
-    // let nativeAmount = '0'
-    // if (typeof edgeSpendInfo.spendTargets[0].nativeAmount === 'string') {
-    //   nativeAmount = edgeSpendInfo.spendTargets[0].nativeAmount
-    // } else {
-    //   throw (new Error('Error: no amount specified'))
-    // }
+    // Check if destination address is activated
+    let mustCreateAccout = false
+    const activated = this.activatedAccountsCache[publicAddress]
+    if (activated === false) {
+      mustCreateAccout = true
+    } else if (activated === undefined) {
+      try {
+        await this.stellarServer.loadAccount(publicAddress)
+        this.activatedAccountsCache[publicAddress] = true
+      } catch (e) {
+        this.activatedAccountsCache[publicAddress] = false
+        mustCreateAccout = true
+      }
+    }
 
-    // if (bns.eq(nativeAmount, '0')) {
-    //   throw (new error.NoAmountSpecifiedError())
-    // }
+    let nativeAmount = '0'
+    if (typeof edgeSpendInfo.spendTargets[0].nativeAmount === 'string') {
+      nativeAmount = edgeSpendInfo.spendTargets[0].nativeAmount
+    } else {
+      throw (new error.NoAmountSpecifiedError())
+    }
 
-    // const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
-    // // const nativeNetworkFee = bns.mul(this.walletLocalData.otherData.recommendedFee, '1000000')
+    if (bns.eq(nativeAmount, '0')) {
+      throw (new error.NoAmountSpecifiedError())
+    }
 
-    // if (currencyCode === PRIMARY_CURRENCY) {
-    //   const totalTxAmount = bns.add(nativeNetworkFee, nativeAmount)
-    //   const virtualTxAmount = bns.add(totalTxAmount, '20000000')
-    //   if (bns.gt(virtualTxAmount, nativeBalance)) {
-    //     throw new error.InsufficientFundsError()
-    //   }
-    // }
+    const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
+    const denom = getDenomInfo(this.currencyInfo, currencyCode)
+    if (!denom) {
+      throw new Error('InternalErrorInvalidCurrencyCode')
+    }
+    const exchangeAmount = bns.div(nativeAmount, denom.multiplier)
 
-    // const exchangeAmount = bns.div(nativeAmount, '1000000', 6)
-    // let uniqueIdentifier
-    // if (
-    //   edgeSpendInfo.spendTargets[0].otherParams &&
-    //   edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier
-    // ) {
-    //   if (typeof edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier === 'string') {
-    //     uniqueIdentifier = parseInt(edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier)
-    //   } else {
-    //     throw new Error('Error invalid destinationtag')
-    //   }
-    // }
-    // const payment = {
-    //   source: {
-    //     address: this.walletLocalData.displayAddress,
-    //     maxAmount: {
-    //       value: exchangeAmount,
-    //       currency: currencyCode
-    //     }
-    //   },
-    //   destination: {
-    //     address: publicAddress,
-    //     amount: {
-    //       value: exchangeAmount,
-    //       currency: currencyCode
-    //     },
-    //     tag: uniqueIdentifier
-    //   }
-    // }
+    const account = new this.stellarApi.Account(this.walletLocalData.displayAddress, this.accountSequence)
+    const txBuilder = new this.stellarApi.TransactionBuilder(account)
+    let transaction
 
-    // let preparedTx = {}
-    // try {
-    //   preparedTx = await this.stellarApi.preparePayment(
-    //     this.walletLocalData.displayAddress,
-    //     payment,
-    //     { maxLedgerVersionOffset: 300 }
-    //   )
-    // } catch (err) {
-    //   console.log(err)
-    //   throw new Error('Error in preparePayment')
-    // }
+    if (mustCreateAccout) {
+      transaction = txBuilder.addOperation(this.stellarApi.Operation.createAccount({
+        destination: publicAddress,
+        amount: exchangeAmount
+      })).build()
+    } else {
+      transaction = txBuilder.addOperation(this.stellarApi.Operation.payment({
+        destination: publicAddress,
+        asset: this.stellarApi.Asset.native(),
+        amount: exchangeAmount
+      })).build()
+    }
 
-    // const otherParams: StellarParams = {
-    //   preparedTx
-    // }
+    const networkFee = transaction.fee.toString()
+    nativeAmount = bns.add(networkFee, nativeAmount) // Add fee to total
+    if (bns.gt(nativeAmount, nativeBalance)) {
+      throw (new error.InsufficientFundsError())
+    }
 
-    // nativeAmount = '-' + nativeAmount
-
+    const idInternal = Array.from(this.io.random(32)).toString()
     const edgeTransaction: EdgeTransaction = {
       txid: '', // txid
       date: 0, // date
       currencyCode: 'XLM', // currencyCode
       blockHeight: 0, // blockHeight
-      nativeAmount: '', // nativeAmount
-      networkFee: '0', // networkFee
+      nativeAmount, // nativeAmount
+      networkFee, // networkFee
       ourReceiveAddresses: [], // ourReceiveAddresses
       signedTx: '0', // signedTx
-      otherParams: {}
+      otherParams: {
+        idInternal,
+        fromAddress: this.walletLocalData.displayAddress,
+        toAddress: publicAddress
+      }
     }
+    this.pendingTransactionsMap = {}
+    this.pendingTransactionsMap[idInternal] = transaction
 
     console.log('Payment transaction prepared...')
     return edgeTransaction
@@ -462,22 +444,37 @@ export class StellarEngine extends CurrencyEngine {
   // asynchronous
   async signTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
     // Do signing
-    // const txJson = edgeTransaction.otherParams.preparedTx.txJSON
-    // const privateKey = this.walletInfo.keys.rippleKey
-
-    // const { signedTransaction, id } = this.stellarApi.sign(txJson, privateKey)
-    // console.log('Payment transaction signed...')
-
-    // edgeTransaction.signedTx = signedTransaction
-    // edgeTransaction.txid = id.toLowerCase()
-    // edgeTransaction.date = Date.now() / 1000
-
+    try {
+      const idInternal = edgeTransaction.otherParams.idInternal
+      const transaction = this.pendingTransactionsMap[idInternal]
+      if (!transaction) {
+        throw new Error('ErrorInvalidTransaction')
+      }
+      console.log('Signing...')
+      const keypair = this.stellarApi.Keypair.fromSecret(this.walletInfo.keys.stellarKey)
+      await transaction.sign(keypair)
+    } catch (e) {
+      console.log(e)
+    }
     return edgeTransaction
   }
 
   // asynchronous
   async broadcastTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
-    // await this.stellarApi.submit(edgeTransaction.signedTx)
+    try {
+      const idInternal = edgeTransaction.otherParams.idInternal
+      const transaction = this.pendingTransactionsMap[idInternal]
+      if (!transaction) {
+        throw new Error('ErrorInvalidTransaction')
+      }
+      console.log('Broadcasting...')
+      const result = await this.stellarServer.submitTransaction(transaction)
+      edgeTransaction.txid = result.hash
+      edgeTransaction.date = Date.now() / 1000
+      this.activatedAccountsCache[edgeTransaction.otherParams.toAddress] = true
+    } catch (e) {
+      console.log(e)
+    }
     return edgeTransaction
   }
 
@@ -485,8 +482,8 @@ export class StellarEngine extends CurrencyEngine {
   async saveTx (edgeTransaction: EdgeTransaction) { return this.saveTxCommon(edgeTransaction) }
 
   getDisplayPrivateSeed () {
-    if (this.walletInfo.keys && this.walletInfo.keys.rippleKey) {
-      return this.walletInfo.keys.rippleKey
+    if (this.walletInfo.keys && this.walletInfo.keys.stellarKey) {
+      return this.walletInfo.keys.stellarKey
     }
     return ''
   }
