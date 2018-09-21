@@ -232,7 +232,7 @@ export class EosEngine extends CurrencyEngine {
     this.addToLoop('checkServerInfoInnerLoop', BLOCKHEIGHT_POLL_MILLISECONDS)
     this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
-    this.addToLoop('saveWalletLoop', SAVE_DATASTORE_MILLISECONDS)
+    this.startEngineCommon()
   }
 
   async killEngine () {

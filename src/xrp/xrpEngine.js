@@ -39,7 +39,6 @@ import { validateObject } from '../common/utils.js'
 const ADDRESS_POLL_MILLISECONDS = 10000
 const BLOCKHEIGHT_POLL_MILLISECONDS = 15000
 const TRANSACTION_POLL_MILLISECONDS = 3000
-const SAVE_DATASTORE_MILLISECONDS = 10000
 const ADDRESS_QUERY_LOOKBACK_BLOCKS = (30 * 60) // ~ one minute
 
 const PRIMARY_CURRENCY = currencyInfo.currencyCode
@@ -220,7 +219,7 @@ export class XrpEngine extends CurrencyEngine {
     this.addToLoop('checkServerInfoInnerLoop', BLOCKHEIGHT_POLL_MILLISECONDS)
     this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
-    this.addToLoop('saveWalletLoop', SAVE_DATASTORE_MILLISECONDS)
+    this.startEngineCommon()
   }
 
   async killEngine () {

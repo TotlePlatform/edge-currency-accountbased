@@ -31,6 +31,8 @@ import {
 } from './types.js'
 import { isHex, normalizeAddress, validateObject } from './utils.js'
 
+const SAVE_DATASTORE_MILLISECONDS = 10000
+
 class CurrencyEngine {
   walletInfo: EdgeWalletInfo
   currencyEngineCallbacks: EdgeCurrencyEngineCallbacks
@@ -259,6 +261,9 @@ class CurrencyEngine {
     console.log(...text)
   }
 
+  async startEngineCommon () {
+    this.addToLoop('saveWalletLoop', SAVE_DATASTORE_MILLISECONDS)
+  }
   // *************************************
   // Public methods
   // *************************************

@@ -43,7 +43,6 @@ const TX_QUERY_PAGING_LIMIT = 2
 const ADDRESS_POLL_MILLISECONDS = 15000
 const BLOCKCHAIN_POLL_MILLISECONDS = 30000
 const TRANSACTION_POLL_MILLISECONDS = 5000
-const SAVE_DATASTORE_MILLISECONDS = 10000
 
 export class StellarEngine extends CurrencyEngine {
   // TODO: Add currency specific params
@@ -272,7 +271,7 @@ export class StellarEngine extends CurrencyEngine {
     this.addToLoop('checkBlockchainInnerLoop', BLOCKCHAIN_POLL_MILLISECONDS)
     this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
-    this.addToLoop('saveWalletLoop', SAVE_DATASTORE_MILLISECONDS)
+    this.startEngineCommon()
   }
 
   async killEngine () {
