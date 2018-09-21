@@ -390,12 +390,12 @@ export class StellarEngine extends CurrencyEngine {
       throw (new error.NoAmountSpecifiedError())
     }
 
-    const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
+    let nativeBalance = this.walletLocalData.totalBalances[currencyCode]
     const denom = getDenomInfo(this.currencyInfo, currencyCode)
     if (!denom) {
       throw new Error('InternalErrorInvalidCurrencyCode')
     }
-    const exchangeAmount = bns.div(nativeAmount, denom.multiplier)
+    const exchangeAmount = bns.div(nativeAmount, denom.multiplier, 7)
 
     const account = new this.stellarApi.Account(this.walletLocalData.displayAddress, this.accountSequence)
     const txBuilder = new this.stellarApi.TransactionBuilder(account)
@@ -404,7 +404,7 @@ export class StellarEngine extends CurrencyEngine {
     if (mustCreateAccout) {
       transaction = txBuilder.addOperation(this.stellarApi.Operation.createAccount({
         destination: publicAddress,
-        amount: exchangeAmount
+        startingBalance: exchangeAmount
       })).build()
     } else {
       transaction = txBuilder.addOperation(this.stellarApi.Operation.payment({
@@ -416,6 +416,7 @@ export class StellarEngine extends CurrencyEngine {
 
     const networkFee = transaction.fee.toString()
     nativeAmount = bns.add(networkFee, nativeAmount) // Add fee to total
+    nativeBalance = bns.sub(nativeBalance, '10000000') // Subtract the 1 min XLM 
     if (bns.gt(nativeAmount, nativeBalance)) {
       throw (new error.InsufficientFundsError())
     }
@@ -457,6 +458,7 @@ export class StellarEngine extends CurrencyEngine {
       await transaction.sign(keypair)
     } catch (e) {
       console.log(e)
+      throw e
     }
     return edgeTransaction
   }
@@ -478,6 +480,7 @@ export class StellarEngine extends CurrencyEngine {
       this.walletLocalDataDirty = true
     } catch (e) {
       console.log(e)
+      throw e
     }
     return edgeTransaction
   }

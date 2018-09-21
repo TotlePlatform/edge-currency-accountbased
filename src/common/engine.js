@@ -158,6 +158,9 @@ class CurrencyEngine {
       const txIdList: Array<string> = []
       let i = 0
       for (const tx of this.transactionList[currencyCode]) {
+        if (!this.txIdMap[currencyCode]) {
+          this.txIdMap[currencyCode] = {}
+        }
         this.txIdMap[currencyCode][tx.txid] = i
         txIdList.push(normalizeAddress(tx.txid))
         i++

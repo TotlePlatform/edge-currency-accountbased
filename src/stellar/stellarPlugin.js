@@ -77,6 +77,7 @@ export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
         const currencyEngine = new StellarEngine(this, io, walletInfo, opts)
 
         currencyEngine.stellarApi = stellarApi
+        stellarApi.Network.usePublicNetwork()
 
         await makeEngineCommon(currencyEngine, this, io, walletInfo, opts)
 
