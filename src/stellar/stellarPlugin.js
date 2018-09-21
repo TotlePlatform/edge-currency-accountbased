@@ -106,7 +106,7 @@ export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
         const amountStr = parsedUri.query.amount
         if (amountStr && typeof amountStr === 'string') {
-          const denom = getDenomInfo(this.currencyInfo, 'XLM')
+          const denom = getDenomInfo(currencyInfo, 'XLM')
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
@@ -148,7 +148,7 @@ export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           if (typeof obj.currencyCode === 'string') {
             currencyCode = obj.currencyCode
           }
-          const denom = getDenomInfo(this.currencyInfo, currencyCode)
+          const denom = getDenomInfo(currencyInfo, currencyCode)
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }

@@ -122,7 +122,7 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
         const amountStr = parsedUri.query.amount
         if (amountStr && typeof amountStr === 'string') {
-          const denom = getDenomInfo(this.currencyInfo, 'XRP')
+          const denom = getDenomInfo(currencyInfo, 'XRP')
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
@@ -154,7 +154,7 @@ export const rippleCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           if (typeof obj.currencyCode === 'string') {
             currencyCode = obj.currencyCode
           }
-          const denom = getDenomInfo(this.currencyInfo, currencyCode)
+          const denom = getDenomInfo(currencyInfo, currencyCode)
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
