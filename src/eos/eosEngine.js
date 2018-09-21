@@ -228,7 +228,6 @@ export class EosEngine extends CurrencyEngine {
 
   async startEngine () {
     this.engineOn = true
-    this.doInitialCallbacks()
     this.addToLoop('checkServerInfoInnerLoop', BLOCKHEIGHT_POLL_MILLISECONDS)
     this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)

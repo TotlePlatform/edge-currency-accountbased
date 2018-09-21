@@ -214,7 +214,6 @@ export class XrpEngine extends CurrencyEngine {
 
   async startEngine () {
     this.engineOn = true
-    this.doInitialCallbacks()
     await this.rippleApi.connect()
     this.addToLoop('checkServerInfoInnerLoop', BLOCKHEIGHT_POLL_MILLISECONDS)
     this.addToLoop('checkAddressesInnerLoop', ADDRESS_POLL_MILLISECONDS)

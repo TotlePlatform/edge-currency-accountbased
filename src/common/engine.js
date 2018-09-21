@@ -220,12 +220,9 @@ class CurrencyEngine {
     }
   }
 
-  doInitialCallbacks () {
+  doInitialBalanceCallback () {
     for (const currencyCode of this.walletLocalData.enabledTokens) {
       try {
-        this.currencyEngineCallbacks.onTransactionsChanged(
-          this.transactionList[currencyCode]
-        )
         this.currencyEngineCallbacks.onBalanceChanged(currencyCode, this.walletLocalData.totalBalances[currencyCode])
       } catch (e) {
         this.log('Error for currencyCode', currencyCode, e)
@@ -233,6 +230,17 @@ class CurrencyEngine {
     }
   }
 
+  doInitialTransactionsCallback () {
+    for (const currencyCode of this.walletLocalData.enabledTokens) {
+      try {
+        this.currencyEngineCallbacks.onTransactionsChanged(
+          this.transactionList[currencyCode]
+        )
+      } catch (e) {
+        this.log('Error for currencyCode', currencyCode, e)
+      }
+    }
+  }
   async addToLoop (func: string, timer: number) {
     try {
       // $FlowFixMe

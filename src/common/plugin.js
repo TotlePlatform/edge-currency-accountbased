@@ -63,6 +63,9 @@ export async function makeEngineCommon (currencyEngine: CurrencyEngine, plugin: 
   currencyEngine.transactionsLoadingPromise = folder.file(TRANSACTION_STORE_FILE).getText().then(result => {
     currencyEngine.transactionList = JSON.parse(result)
     currencyEngine.transactionsLoadingPromise = null
+    setTimeout(() => {
+      currencyEngine.doInitialTransactionsCallback()
+    }, 5000)
   }).catch(e => {
     console.log(e)
     console.log('Failed to load transactionList store file. Failure is ok on new device')
@@ -71,6 +74,8 @@ export async function makeEngineCommon (currencyEngine: CurrencyEngine, plugin: 
   for (const token of currencyEngine.walletLocalData.enabledTokens) {
     currencyEngine.tokenCheckStatus[token] = 0
   }
+  currencyEngine.doInitialBalanceCallback()
+
   return currencyEngine
 }
 

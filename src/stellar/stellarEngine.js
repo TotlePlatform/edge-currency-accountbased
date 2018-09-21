@@ -265,7 +265,6 @@ export class StellarEngine extends CurrencyEngine {
 
   async startEngine () {
     this.engineOn = true
-    this.doInitialCallbacks()
     this.stellarServer = new this.stellarApi.Server(this.currencyInfo.defaultSettings.otherSettings.stellarServers[0])
 
     this.addToLoop('checkBlockchainInnerLoop', BLOCKCHAIN_POLL_MILLISECONDS)
