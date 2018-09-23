@@ -147,7 +147,7 @@ export const eosCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
-          amount = bns.div(nativeAmount, denom.multiplier, 18)
+          amount = bns.div(nativeAmount, denom.multiplier, 4)
         }
         const encodedUri = encodeUriCommon(obj, 'eos', amount)
         return encodedUri

@@ -152,7 +152,7 @@ export const stellarCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           if (!denom) {
             throw new Error('InternalErrorInvalidCurrencyCode')
           }
-          amount = bns.div(nativeAmount, denom.multiplier, 18)
+          amount = bns.div(nativeAmount, denom.multiplier, 7)
         }
         if (!amount && !obj.label && !obj.message) {
           return obj.publicAddress
