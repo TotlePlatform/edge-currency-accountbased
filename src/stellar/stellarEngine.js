@@ -426,6 +426,7 @@ export class StellarEngine extends CurrencyEngine {
       throw (new error.InsufficientFundsError())
     }
 
+    nativeAmount = `-${nativeAmount}`
     const idInternal = Buffer.from(this.io.random(32)).toString('hex')
     const edgeTransaction: EdgeTransaction = {
       txid: '', // txid

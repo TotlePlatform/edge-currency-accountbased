@@ -18,7 +18,7 @@ import type {
   // EdgeDenomination,
   // EdgeIo
 } from 'edge-core-js'
-// import { error } from 'edge-core-js'
+import { error } from 'edge-core-js'
 import { bns } from 'biggystring'
 import {
   MakeSpendSchema
@@ -54,6 +54,7 @@ export class EosEngine extends CurrencyEngine {
   // to the EosEngine class definition in eosEngine.js and initialize them in the
   // constructor()
   eosServer: Object
+  activatedAccountsCache: { [publicAddress: string ]: boolean }
   otherData: EosWalletOtherData
 
   constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
@@ -67,7 +68,17 @@ export class EosEngine extends CurrencyEngine {
       }
     }
 
+    this.activatedAccountsCache = {}
     this.eosServer = {}
+  }
+
+  async getAccSystemStats (account: string) {
+    return new Promise((resolve, reject) => {
+      this.eosServer.getAccount(account, (error, result) => {
+        if (error) reject(error)
+        resolve(result)
+      })
+    })
   }
 
   // Poll on the blockheight
@@ -293,6 +304,7 @@ export class EosEngine extends CurrencyEngine {
 
   async resyncBlockchain (): Promise<void> {
     await this.killEngine()
+    this.activatedAccountsCache = {}
     await this.resyncBlockchainCommon()
     await this.startEngine()
   }
@@ -349,68 +361,197 @@ export class EosEngine extends CurrencyEngine {
 
   // synchronous
   async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
-    // // Validate the spendInfo
+    // Validate the spendInfo
     const valid = validateObject(edgeSpendInfo, MakeSpendSchema)
 
     if (!valid) {
       throw (new Error('Error: invalid EdgeSpendInfo'))
     }
 
-    // TODO: Validate the number of destination targets supported by this currency.
-    // ie. Bitcoin can do multiple targets. Ethereum only one
-    // edgeSpendInfo.spendTargets.length
+    if (edgeSpendInfo.spendTargets.length !== 1) {
+      throw (new Error('Error: only one output allowed'))
+    }
 
-    // TODO: Validate for valid currencyCode which will be in
-    // edgeSpendInfo.currencyCode if specified by user. Otherwise use native currency
+    let currencyCode: string = ''
+    if (typeof edgeSpendInfo.currencyCode === 'string') {
+      currencyCode = edgeSpendInfo.currencyCode
+    } else {
+      currencyCode = 'EOS'
+    }
+    edgeSpendInfo.currencyCode = currencyCode
 
-    // TODO: Get nativeAmount which is denoted is small currency unit. ie satoshi/wei
-    // edgeSpendInfo.spendTargets[0].nativeAmount
-    //
-    // Throw if this currency cannot spend a 0 amount
-    // if (bns.eq(nativeAmount, '0')) {
-    //   throw (new error.NoAmountSpecifiedError())
-    // }
+    let publicAddress = ''
 
-    // TODO: Get current wallet balance and make sure there are sufficient funds including fees
-    // const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
+    if (typeof edgeSpendInfo.spendTargets[0].publicAddress === 'string') {
+      publicAddress = edgeSpendInfo.spendTargets[0].publicAddress
+    } else {
+      throw new Error('No valid spendTarget')
+    }
 
-    // TODO: Extract unique identifier for this transaction. This is known as a Payment ID for
-    // Monero, Destination Tag for Ripple, and Memo ID for Stellar. Use if currency is capable
-    // edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier
+    // Check if destination address is activated
+    let mustCreateAccount = false
+    const activated = this.activatedAccountsCache[publicAddress]
+    if (activated !== undefined && activated === false) {
+      mustCreateAccount = true
+    } else if (activated === undefined) {
+      try {
+        await this.getAccSystemStats(publicAddress)
+        this.activatedAccountsCache[publicAddress] = true
+      } catch (e) {
+        if (e.message.includes('unknown key')) {
+          this.activatedAccountsCache[publicAddress] = false
+          mustCreateAccount = true
+        } else {
+          console.log(e)
+          throw e
+        }
+      }
+    }
+    if (mustCreateAccount) {
+      throw new Error('ErrorAccountNotActivated')
+    }
 
-    // TODO: Create an EdgeTransaction object with the following params filled out:
-    // currencyCode
-    // blockHeight = 0
-    // nativeAmount (which includes fee)
-    // networkFee (in smallest unit of currency)
-    // ourReceiveAddresses = []
-    // signedTx = ''
-    // otherParams. Object declared in this currency's types.js file (ie. eosTypes.js) 
-    //  which are additional params useful for signing and broadcasting transaction 
+    let nativeAmount = '0'
+    if (typeof edgeSpendInfo.spendTargets[0].nativeAmount === 'string') {
+      nativeAmount = edgeSpendInfo.spendTargets[0].nativeAmount
+    } else {
+      throw (new error.NoAmountSpecifiedError())
+    }
+
+    if (bns.eq(nativeAmount, '0')) {
+      throw (new error.NoAmountSpecifiedError())
+    }
+
+    const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
+    const denom = getDenomInfo(this.currencyInfo, currencyCode)
+    if (!denom) {
+      throw new Error('InternalErrorInvalidCurrencyCode')
+    }
+    const exchangeAmount = bns.div(nativeAmount, denom.multiplier, 4)
+    const networkFee = '0'
+    if (bns.gt(nativeAmount, nativeBalance)) {
+      throw (new error.InsufficientFundsError())
+    }
+    const DecimalPad = eosjs.modules.format.DecimalPad
+    const quantity = DecimalPad(exchangeAmount, 4) + ` ${currencyCode}`
+    const transactionJson = {
+      actions: [
+        {
+          account: 'eosio.token',
+          name: 'transfer',
+          authorization: [{
+            actor: this.walletLocalData.otherData.accountName,
+            permission: 'active'
+          }],
+          data: {
+            from: this.walletLocalData.otherData.accountName,
+            to: publicAddress,
+            quantity,
+            memo: ''
+          }
+        }
+      ]
+    }
+
+    // Create an unsigned transaction to catch any errors
+    await this.eosServer.transaction(transactionJson, {
+      sign: false,
+      broadcast: false
+    })
+
+    nativeAmount = `-${nativeAmount}`
+
+    // const idInternal = Buffer.from(this.io.random(32)).toString('hex')
     const edgeTransaction: EdgeTransaction = {
       txid: '', // txid
       date: 0, // date
-      currencyCode: '', // currencyCode
+      currencyCode, // currencyCode
       blockHeight: 0, // blockHeight
-      nativeAmount: '', // nativeAmount
-      networkFee: '', // networkFee
+      nativeAmount, // nativeAmount
+      networkFee, // networkFee
       ourReceiveAddresses: [], // ourReceiveAddresses
       signedTx: '0', // signedTx
-      otherParams: {}
+      otherParams: {
+        transactionJson
+      }
     }
+    // this.pendingTransactionsMap = {}
+    // this.pendingTransactionsMap[idInternal] = transaction
 
-    console.log('Payment transaction prepared...')
+    console.log('EOS transaction prepared')
+    console.log(`${nativeAmount} ${this.walletLocalData.publicKey} -> ${publicAddress}`)
     return edgeTransaction
   }
+
+  // // synchronous
+  // async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
+  //   // // Validate the spendInfo
+  //   const valid = validateObject(edgeSpendInfo, MakeSpendSchema)
+
+  //   if (!valid) {
+  //     throw (new Error('Error: invalid EdgeSpendInfo'))
+  //   }
+
+  //   // TODO: Validate the number of destination targets supported by this currency.
+  //   // ie. Bitcoin can do multiple targets. Ethereum only one
+  //   // edgeSpendInfo.spendTargets.length
+
+  //   // TODO: Validate for valid currencyCode which will be in
+  //   // edgeSpendInfo.currencyCode if specified by user. Otherwise use native currency
+
+  //   // TODO: Get nativeAmount which is denoted is small currency unit. ie satoshi/wei
+  //   // edgeSpendInfo.spendTargets[0].nativeAmount
+  //   //
+  //   // Throw if this currency cannot spend a 0 amount
+  //   // if (bns.eq(nativeAmount, '0')) {
+  //   //   throw (new error.NoAmountSpecifiedError())
+  //   // }
+
+  //   // TODO: Get current wallet balance and make sure there are sufficient funds including fees
+  //   // const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
+
+  //   // TODO: Extract unique identifier for this transaction. This is known as a Payment ID for
+  //   // Monero, Destination Tag for Ripple, and Memo ID for Stellar. Use if currency is capable
+  //   // edgeSpendInfo.spendTargets[0].otherParams.uniqueIdentifier
+
+  //   // TODO: Create an EdgeTransaction object with the following params filled out:
+  //   // currencyCode
+  //   // blockHeight = 0
+  //   // nativeAmount (which includes fee)
+  //   // networkFee (in smallest unit of currency)
+  //   // ourReceiveAddresses = []
+  //   // signedTx = ''
+  //   // otherParams. Object declared in this currency's types.js file (ie. eosTypes.js) 
+  //   //  which are additional params useful for signing and broadcasting transaction 
+  //   const edgeTransaction: EdgeTransaction = {
+  //     txid: '', // txid
+  //     date: 0, // date
+  //     currencyCode: '', // currencyCode
+  //     blockHeight: 0, // blockHeight
+  //     nativeAmount: '', // nativeAmount
+  //     networkFee: '', // networkFee
+  //     ourReceiveAddresses: [], // ourReceiveAddresses
+  //     signedTx: '0', // signedTx
+  //     otherParams: {}
+  //   }
+
+  //   console.log('Payment transaction prepared...')
+  //   return edgeTransaction
+  // }
 
   // asynchronous
   async signTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
     // Do signing
     // Take the private key from this.walletInfo.keys.eosKey and sign the transaction
-    // const privateKey = this.walletInfo.keys.rippleKey
-
-    // If signed data is in string format, add to edgeTransaction.signedTx
-    // Otherwise utilize otherParams
+    // const privateKey = this.walletInfo.keys.eosKey
+    const keyProvider = []
+    if (this.walletInfo.keys.eosKey) keyProvider.push(this.walletInfo.keys.eosKey)
+    if (this.walletInfo.keys.eosOwnerKey) keyProvider.push(this.walletInfo.keys.eosOwnerKey)
+    await this.eosServer.transaction(edgeTransaction.otherParams.transactionJson, {
+      keyProvider,
+      sign: true,
+      broadcast: false
+    })
 
     // Complete edgeTransaction.txid params if possible at this state
     return edgeTransaction
@@ -419,7 +560,16 @@ export class EosEngine extends CurrencyEngine {
   // asynchronous
   async broadcastTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
     // Broadcast transaction and add date
-    // edgeTransaction.data = Date.now() / 1000
+    const keyProvider = []
+    if (this.walletInfo.keys.eosKey) keyProvider.push(this.walletInfo.keys.eosKey)
+    if (this.walletInfo.keys.eosOwnerKey) keyProvider.push(this.walletInfo.keys.eosOwnerKey)
+    const signedTx = await this.eosServer.transaction(edgeTransaction.otherParams.transactionJson, {
+      keyProvider,
+      sign: true,
+      broadcast: true
+    })
+    edgeTransaction.date = Date.now() / 1000
+    edgeTransaction.txid = signedTx.transaction_id
     return edgeTransaction
   }
 

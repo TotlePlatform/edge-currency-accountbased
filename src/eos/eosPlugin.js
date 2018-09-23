@@ -14,7 +14,7 @@ import type {
 } from 'edge-core-js'
 import { getDenomInfo } from '../common/utils.js'
 import { EosEngine } from './eosEngine'
-import { bns, add } from 'biggystring'
+import { bns } from 'biggystring'
 const eos = require('eosjs')
 const { ecc } = eos.modules
 
