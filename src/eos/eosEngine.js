@@ -101,7 +101,66 @@ export class EosEngine extends CurrencyEngine {
     }
   }
 
-  processTransaction (tx: EosGetTransaction) {
+  processTransaction (action: EosGetTransaction) {
+    const ourReceiveAddresses = []
+    const date = Date.parse(action.block_time) / 1000
+    const blockHeight = action.block_num
+    if (!action.action_trace) {
+      console.log('Invalid EOS transaction data. No action_trace')
+      return
+    }
+    const txid = action.action_trace.trx_id
+
+    if (!action.action_trace.act) {
+      console.log('Invalid EOS transaction data. No action_trace.act')
+      return
+    }
+    const name = action.action_trace.act.name
+    // console.log('------------------------------------------------')
+    // console.log(`Txid: ${txid}`)
+    // console.log(`Action type: ${name}`)
+    if (name === 'transfer') {
+      if (!action.action_trace.act.data) {
+        console.log('Invalid EOS transaction data. No action_trace.act.data')
+        return
+      }
+      const { from, to, memo, quantity } = action.action_trace.act.data
+      const split = quantity.split(' ')
+      const [ exchangeAmount, currencyCode ] = split
+
+      const denom = getDenomInfo(this.currencyInfo, currencyCode)
+      let nativeAmount = bns.mul(exchangeAmount, denom.multiplier)
+      if (to === this.walletLocalData.otherData.accountName) {
+        ourReceiveAddresses.push(to)
+      } else {
+        nativeAmount = `-${nativeAmount}`
+      }
+
+      const edgeTransaction: EdgeTransaction = {
+        txid,
+        date,
+        currencyCode,
+        blockHeight,
+        nativeAmount,
+        networkFee: '0',
+        parentNetworkFee: '0',
+        ourReceiveAddresses,
+        signedTx: 'has_been_signed',
+        metadata: {
+          notes: memo
+        },
+        otherParams: { fromAddress: from, toAddress: to }
+      }
+
+      this.addTransaction(currencyCode, edgeTransaction)
+
+      // console.log(`From: ${from}`)
+      // console.log(`To: ${to}`)
+      // console.log(`Memo: ${memo}`)
+      // console.log(`Amount: ${exchangeAmount}`)
+      // console.log(`currencyCode: ${currencyCode}`)
+    }
+
     // const ourReceiveAddresses:Array<string> = []
 
     // const balanceChanges = tx.outcome.balanceChanges[this.walletLocalData.publicKey]
@@ -176,6 +235,22 @@ export class EosEngine extends CurrencyEngine {
   }
 
   async checkTransactionsInnerLoop () {
+    try {
+      const actions = await this.eosServer.getActions(this.walletLocalData.otherData.accountName)
+      if (actions.actions && actions.actions.length > 0) {
+        for (const action of actions.actions) {
+          this.processTransaction(action)
+        }
+      }
+    } catch (e) {
+      console.log(e)
+    }
+    if (this.transactionsChangedArray.length > 0) {
+      this.currencyEngineCallbacks.onTransactionsChanged(
+        this.transactionsChangedArray
+      )
+      this.transactionsChangedArray = []
+    }
     // const address = this.walletLocalData.publicKey
     // let startBlock:number = 0
     // if (this.walletLocalData.lastAddressQueryHeight > ADDRESS_QUERY_LOOKBACK_BLOCKS) {

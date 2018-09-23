@@ -8,6 +8,21 @@ export type EosSettings = {
   eosNodes: Array<string>
 }
 export type EosGetTransaction = {
+  block_time: string,
+  block_num: number,
+  action_trace: {
+    trx_id: string,
+    act: {
+      name: string,
+      data: {
+        from: string,
+        to: string,
+        memo: string,
+        quantity: string
+      }
+    }
+  }
+
   // type: string,
   // address: string,
   // id: string,
