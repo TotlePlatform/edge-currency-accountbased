@@ -21,60 +21,73 @@ import type {
 // import { error } from 'edge-core-js'
 import { bns } from 'biggystring'
 import {
-  EosGetBalancesSchema
-  // EosGetBlockchainInfoSchema
-} from './eosSchema.js'
-import {
   MakeSpendSchema
 } from '../common/schema.js'
 import {
   CurrencyEngine
 } from '../common/engine.js'
-import { validateObject } from '../common/utils.js'
+import { validateObject, getDenomInfo } from '../common/utils.js'
 import {
   type EosGetTransaction,
   type EosWalletOtherData
 } from './eosTypes.js'
+import eosjs from 'eosjs'
 
 const ADDRESS_POLL_MILLISECONDS = 10000
 const BLOCKCHAIN_POLL_MILLISECONDS = 15000
 const TRANSACTION_POLL_MILLISECONDS = 3000
 // const ADDRESS_QUERY_LOOKBACK_BLOCKS = (30 * 60) // ~ one minute
 
+// ----MAIN NET----
+const config = {
+  chainId: 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906', // main net
+  keyProvider: [],
+  httpEndpoint: '', // main net
+  expireInSeconds: 60,
+  sign: false, // sign the transaction with a private key. Leaving a transaction unsigned avoids the need to provide a private key
+  broadcast: false, // post the transaction to the blockchain. Use false to obtain a fully signed transaction
+  verbose: false // verbose logging such as API activity
+}
 export class EosEngine extends CurrencyEngine {
   // TODO: Add currency specific params
   // Store any per wallet specific data in the `currencyEngine` object. Add any params
   // to the EosEngine class definition in eosEngine.js and initialize them in the
   // constructor()
-  eosApi: Object
+  eosServer: Object
   otherData: EosWalletOtherData
 
   constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     super(currencyPlugin, io_, walletInfo, opts)
-    this.eosApi = {}
+    if (typeof this.walletInfo.keys.ownerPublicKey !== 'string') {
+      if (walletInfo.keys.ownerPublicKey) {
+        this.walletInfo.keys.ownerPublicKey = walletInfo.keys.ownerPublicKey
+      } else {
+        const pubKeys = currencyPlugin.derivePublicKey(this.walletInfo)
+        this.walletInfo.keys.ownerPublicKey = pubKeys.ownerPublicKey
+      }
+    }
+
+    this.eosServer = {}
   }
 
   // Poll on the blockheight
-    // try {
-    //   const fee = await this.eosApi.getFee()
-    //   if (typeof fee === 'string') {
-    //     this.walletLocalData.recommendedFee = fee
-    //   }
-    //   const jsonObj = await this.eosApi.getServerInfo()
-    //   const valid = validateObject(jsonObj, EosGetBlockchainInfoSchema)
-    //   if (valid) {
-    //     const blockHeight: number = jsonObj.validatedLedger.ledgerVersion
-    //     this.log(`Got block height ${blockHeight}`)
-    //     if (this.walletLocalData.blockHeight !== blockHeight) {
-    //       this.walletLocalData.blockHeight = blockHeight // Convert to decimal
-    //       this.walletLocalDataDirty = true
-    //       this.currencyEngineCallbacks.onBlockHeightChanged(this.walletLocalData.blockHeight)
-    //     }
-    //   }
-    // } catch (err) {
-    //   this.log(`Error fetching height: ${JSON.stringify(err)}`)
-    // }
   async checkBlockchainInnerLoop () {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        this.eosServer.getInfo((error, info) => {
+          if (error) reject(error)
+          else resolve(info)
+        })
+      })
+      const blockHeight = result.head_block_num
+      if (this.walletLocalData.blockHeight !== blockHeight) {
+        this.walletLocalData.blockHeight = blockHeight
+        this.walletLocalDataDirty = true
+        this.currencyEngineCallbacks.onBlockHeightChanged(this.walletLocalData.blockHeight)
+      }
+    } catch (e) {
+      this.log(`Error fetching height: ${JSON.stringify(e)}`)
+    }
   }
 
   processTransaction (tx: EosGetTransaction) {
@@ -195,34 +208,60 @@ export class EosEngine extends CurrencyEngine {
     this.currencyEngineCallbacks.onAddressesChecked(1)
   }
 
-  async checkUnconfirmedTransactionsFetch () {
-
-  }
-
   // Check all account balance and other relevant info
   async checkAccountInnerLoop () {
-    const address = this.walletLocalData.publicKey
+    const publicKey = this.walletLocalData.publicKey
     try {
-      const jsonObj = await this.eosApi.getBalances(address)
-      const valid = validateObject(jsonObj, EosGetBalancesSchema)
-      if (valid) {
-        for (const bal of jsonObj) {
-          const currencyCode = bal.currency
-          const exchangeAmount = bal.value
-          const nativeAmount = bns.mul(exchangeAmount, '1000000')
+      // Check if the publicKey has an account accountName
+      if (!this.walletLocalData.otherData.accountName) {
+        const accounts = await new Promise((resolve, reject) => {
+          this.eosServer.getKeyAccounts(publicKey, (error, result) => {
+            if (error) reject(error)
+            resolve(result)
+            // array of account names, can be multiples
+            // output example: { account_names: [ 'itamnetwork1', ... ] }
+          })
+        })
+        if (accounts.account_names && accounts.account_names.length > 0) {
+          this.walletLocalData.otherData.accountName = accounts.account_names[0]
+        }
+      }
 
-          if (typeof this.walletLocalData.totalBalances[currencyCode] === 'undefined') {
-            this.walletLocalData.totalBalances[currencyCode] = '0'
-          }
+      // Check balance on account
+      if (this.walletLocalData.otherData.accountName) {
+        const results = await this.eosServer.getCurrencyBalance('eosio.token', this.walletLocalData.otherData.accountName)
+        if (results && results.length > 0) {
+          for (const r of results) {
+            if (typeof r === 'string') {
+              const balanceArray = r.split(' ')
+              if (balanceArray.length === 2) {
+                const exchangeAmount = balanceArray[0]
+                const currencyCode = balanceArray[1]
+                let nativeAmount = ''
 
-          if (this.walletLocalData.totalBalances[currencyCode] !== nativeAmount) {
-            this.walletLocalData.totalBalances[currencyCode] = nativeAmount
-            this.currencyEngineCallbacks.onBalanceChanged(currencyCode, nativeAmount)
+                // Convert exchange amount to native amount
+                const denom = getDenomInfo(this.currencyInfo, currencyCode)
+                if (denom && denom.multiplier) {
+                  nativeAmount = bns.mul(exchangeAmount, denom.multiplier)
+                } else {
+                  console.log(`Received balance for unsupported currencyCode: ${currencyCode}`)
+                }
+
+                if (!this.walletLocalData.totalBalances[currencyCode]) this.walletLocalData.totalBalances[currencyCode] = '0'
+                if (!bns.eq(this.walletLocalData.totalBalances[currencyCode], nativeAmount)) {
+                  this.walletLocalData.totalBalances[currencyCode] = nativeAmount
+                }
+                if (this.walletLocalData.totalBalances[currencyCode] !== nativeAmount) {
+                  this.walletLocalData.totalBalances[currencyCode] = nativeAmount
+                  this.currencyEngineCallbacks.onBalanceChanged(currencyCode, nativeAmount)
+                }
+              }
+            }
           }
         }
       }
     } catch (e) {
-      this.log(`Error fetching address info: ${JSON.stringify(e)}`)
+      this.log(`Error fetching account: ${JSON.stringify(e)}`)
     }
   }
 
@@ -235,6 +274,10 @@ export class EosEngine extends CurrencyEngine {
   // This routine is called once a wallet needs to start querying the network
   async startEngine () {
     this.engineOn = true
+
+    config.httpEndpoint = this.currencyInfo.defaultSettings.otherSettings.eosNodes[0]
+    this.eosServer = eosjs(config)
+
     this.addToLoop('checkBlockchainInnerLoop', BLOCKCHAIN_POLL_MILLISECONDS)
     this.addToLoop('checkAccountInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
@@ -285,7 +328,18 @@ export class EosEngine extends CurrencyEngine {
   async getTransactions (options: any) { return this.getTransactionsCommon(options) }
   // synchronous
 
-  getFreshAddress (options: any): EdgeFreshAddress { return this.getFreshAddressCommon(options) }
+  getFreshAddress (options: any): EdgeFreshAddress {
+    if (this.walletLocalData.otherData.accountName) {
+      return { publicAddress: this.walletLocalData.otherData.accountName }
+    } else {
+      // Account is not yet active. Return the publicKeys so the user can activate the account
+      return {
+        publicAddress: '',
+        publicKey: this.walletInfo.keys.publicKey,
+        ownerPublicKey: this.walletInfo.keys.ownerPublicKey
+      }
+    }
+  }
 
   // synchronous
   addGapLimitAddresses (addresses: Array<string>, options: any) { return this.addGapLimitAddressesCommon(addresses, options) }

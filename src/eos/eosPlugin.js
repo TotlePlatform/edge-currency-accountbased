@@ -14,26 +14,27 @@ import type {
 } from 'edge-core-js'
 import { getDenomInfo } from '../common/utils.js'
 import { EosEngine } from './eosEngine'
-import { bns } from 'biggystring'
+import { bns, add } from 'biggystring'
 const eos = require('eosjs')
 const { ecc } = eos.modules
 
-// ----MAIN NET----
-// const config = {
-//   chainId: 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906', // main net
-//   httpEndpoint: 'https://api.eosnewyork.io:443', // main net
-//   expireInSeconds: 60,
-//   sign: true, // sign the transaction with a private key. Leaving a transaction unsigned avoids the need to provide a private key
-//   broadcast: true, // post the transaction to the blockchain. Use false to obtain a fully signed transaction
-//   verbose: false // verbose logging such as API activity
-// }
-
 let io
+
+const validCharacters = '12345abcdefghijklmnopqrstuvwxyz'
 
 function checkAddress (address: string): boolean {
   // TODO: Check for a valid address format. The passed in
   // address would be a use visible displayed address such as what would
   // go into a QR code
+
+  if (address.length !== 12) return false
+
+  for (let i = 0; i < address.length; i++) {
+    const c = address.charAt(i)
+    if (!validCharacters.includes(c)) {
+      return false
+    }
+  }
   return true
 }
 
@@ -59,10 +60,10 @@ export const eosCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           // Use io.random() for random number generation
           // Multiple keys can be created and stored here. ie. If there is both a mnemonic and key format,
           // Generate and store them here by returning an arbitrary object with them.
-          let entropy = Buffer.from(io.random(256)).toString('hex')
+          let entropy = Buffer.from(io.random(32)).toString('hex')
           const eosOwnerKey = ecc.seedPrivate(entropy)
-          entropy = Buffer.from(io.random(256)).toString('hex')
-          const eosKey = ecc.PrivateKey.seedPrivate(entropy)
+          entropy = Buffer.from(io.random(32)).toString('hex')
+          const eosKey = ecc.seedPrivate(entropy)
           return { eosOwnerKey, eosKey }
         } else {
           throw new Error('InvalidWalletType')
@@ -78,8 +79,11 @@ export const eosCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           // const publicKey = derivePubkey(walletInfo.keys.eosKey)
           // const publicKey = deriveAddress(walletInfo.keys.eosKey)
           const publicKey = ecc.privateToPublic(walletInfo.keys.eosKey)
-          const ownerPubKey = ecc.privateToPublic(walletInfo.keys.eosOwnerKey)
-          return { publicKey, ownerPubKey }
+          let ownerPublicKey
+          if (walletInfo.keys.eosOwnerKey) {
+            ownerPublicKey = ecc.privateToPublic(walletInfo.keys.eosOwnerKey)
+          }
+          return { publicKey, ownerPublicKey }
         } else {
           throw new Error('InvalidWalletType')
         }
@@ -97,6 +101,7 @@ export const eosCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
         // undefined
         // TODO: Initialize anything specific to this currency
         // if (!currencyEngine.otherData.nonce) currencyEngine.otherData.nonce = 0
+        if (!currencyEngine.otherData.accountName) currencyEngine.otherData.accountName = ''
 
         const out: EdgeCurrencyEngine = currencyEngine
         return out

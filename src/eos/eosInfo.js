@@ -9,7 +9,7 @@ const otherSettings: EosSettings = {
     ''
   ],
   eosNodes: [
-    ''
+    'https://api.eosnewyork.io:443'
   ]
 }
 
@@ -35,7 +35,7 @@ export const currencyInfo: EdgeCurrencyInfo = {
     // An array of Objects of the possible denominations for this currency
     {
       name: 'EOS',
-      multiplier: '1000000',
+      multiplier: '1000',
       symbol: 'E'
     }
   ],
