@@ -174,7 +174,6 @@ class CurrencyEngine {
   updateTransaction (currencyCode: string, edgeTransaction: EdgeTransaction, idx: number) {
     // Update the transaction
     this.transactionList[currencyCode][idx] = edgeTransaction
-    this.transactionList[currencyCode].sort(this.sortTxByDate)
     this.transactionListDirty = true
     this.transactionsChangedArray.push(edgeTransaction)
     this.log('updateTransaction:' + edgeTransaction.txid)
