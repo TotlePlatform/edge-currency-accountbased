@@ -250,9 +250,6 @@ export class EosEngine extends CurrencyEngine {
                 if (!this.walletLocalData.totalBalances[currencyCode]) this.walletLocalData.totalBalances[currencyCode] = '0'
                 if (!bns.eq(this.walletLocalData.totalBalances[currencyCode], nativeAmount)) {
                   this.walletLocalData.totalBalances[currencyCode] = nativeAmount
-                }
-                if (this.walletLocalData.totalBalances[currencyCode] !== nativeAmount) {
-                  this.walletLocalData.totalBalances[currencyCode] = nativeAmount
                   this.currencyEngineCallbacks.onBalanceChanged(currencyCode, nativeAmount)
                 }
               }
