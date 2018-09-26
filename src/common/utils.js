@@ -35,4 +35,37 @@ function getDenomInfo (currencyInfo: EdgeCurrencyInfo, denom: string) {
   })
 }
 
-export { normalizeAddress, validateObject, getDenomInfo }
+const snoozeReject: Function = (ms: number) => new Promise((resolve: Function, reject: Function) => setTimeout(reject, ms))
+const snooze: Function = (ms: number) => new Promise((resolve: Function) => setTimeout(resolve, ms))
+
+function promiseAny (promises: Array<Promise<any>>): Promise<any> {
+  return new Promise((resolve: Function, reject: Function) => {
+    let pending = promises.length
+    for (const promise of promises) {
+      promise.then(value => resolve(value), error => --pending || reject(error))
+    }
+  })
+}
+
+type AsyncFunction = (void) => Promise<any>
+
+async function asyncWaterfall (asyncFuncs: Array<AsyncFunction>, timeoutMs: number): Promise<any> {
+  let pending = asyncFuncs.length
+  const promises: Array<Promise> = []
+  for (const func of asyncFuncs) {
+    promises.push(func())
+    promises.push(snoozeReject(timeoutMs))
+    try {
+      const result = await Promise.race(promises)
+      return result
+    } catch (e) {
+      promises.pop()
+      --pending
+      if (!pending) {
+        throw e
+      }
+    }
+  }
+}
+
+export { normalizeAddress, validateObject, getDenomInfo, asyncWaterfall, snooze, snoozeReject, promiseAny }
