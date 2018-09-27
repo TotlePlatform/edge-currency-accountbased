@@ -49,16 +49,33 @@ function promiseAny (promises: Array<Promise<any>>): Promise<any> {
 
 type AsyncFunction = (void) => Promise<any>
 
-async function asyncWaterfall (asyncFuncs: Array<AsyncFunction>, timeoutMs: number): Promise<any> {
+async function asyncWaterfall (asyncFuncs: Array<AsyncFunction>, timeoutMs: number = 5000): Promise<any> {
   let pending = asyncFuncs.length
-  const promises: Array<Promise> = []
+  const promises: Array<Promise<any>> = []
   for (const func of asyncFuncs) {
-    promises.push(func())
-    promises.push(snoozeReject(timeoutMs))
+    const index = promises.length
+    promises.push(func().catch(e => {
+      e.index = index
+      throw e
+    }))
+    if (pending > 1) {
+      promises.push(new Promise((resolve) => {
+        snooze(timeoutMs).then(() => {
+          resolve('async_waterfall_timed_out')
+        })
+      }))
+    }
     try {
       const result = await Promise.race(promises)
-      return result
+      if (result === 'async_waterfall_timed_out') {
+        promises.pop()
+        --pending
+      } else {
+        return result
+      }
     } catch (e) {
+      const i = e.index
+      promises.splice(i, 1)
       promises.pop()
       --pending
       if (!pending) {

@@ -26,4 +26,24 @@ describe(`Utils testing`, function () {
     const result = await asyncWaterfall(funcs, 250)
     assert.equal(result, 2)
   })
+
+  it('Async Waterfall 3', async function () {
+    const funcs = [
+      async () => { await snoozeReject(50); return 1 },
+      async () => { await snoozeReject(50); return 2 },
+      async () => { await snooze(200); return 3 }
+    ]
+    const result = await asyncWaterfall(funcs, 250)
+    assert.equal(result, 3)
+  })
+
+  it('Async Waterfall 4', async function () {
+    const funcs = [
+      async () => { await snoozeReject(50); return 1 },
+      async () => { await snoozeReject(50); return 2 },
+      async () => { await snooze(500); return 3 }
+    ]
+    const result = await asyncWaterfall(funcs, 250)
+    assert.equal(result, 3)
+  })
 })
