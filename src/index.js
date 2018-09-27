@@ -6,4 +6,4 @@
 // export { eosCurrencyPluginFactory } from './eos/eosPlugin.js'
 export { stellarCurrencyPluginFactory } from './stellar/stellarPlugin.js'
 export { rippleCurrencyPluginFactory } from './xrp/xrpPlugin.js'
-export { eosCurrencyPluginFactory } from './eos/eosPlugin.js'
+// export { eosCurrencyPluginFactory } from './eos/eosPlugin.js'
