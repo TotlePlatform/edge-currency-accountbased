@@ -15,8 +15,6 @@ import fetch from 'node-fetch'
 import * as Factories from '../../src/index.js'
 import fixtures from './fixtures.json'
 
-// const DATA_STORE_FOLDER = 'txEngineFolderBTC'
-
 for (const fixture of fixtures) {
   const CurrencyPluginFactory = Factories[fixture['factory']]
   const WALLET_TYPE = fixture['WALLET_TYPE']

@@ -30,10 +30,12 @@ import {
   type CustomToken
 } from './types.js'
 import { isHex, normalizeAddress, validateObject } from './utils.js'
+import { CurrencyPlugin } from './plugin.js'
 
 const SAVE_DATASTORE_MILLISECONDS = 10000
 
 class CurrencyEngine {
+  currencyPlugin: CurrencyPlugin
   walletInfo: EdgeWalletInfo
   currencyEngineCallbacks: EdgeCurrencyEngineCallbacks
   walletLocalFolder: Object
@@ -57,10 +59,11 @@ class CurrencyEngine {
   io: EdgeIo
   otherData: Object
 
-  constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
+  constructor (currencyPlugin: CurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     const currencyCode = currencyPlugin.currencyInfo.currencyCode
     const { walletLocalFolder, callbacks } = opts
 
+    this.currencyPlugin = currencyPlugin
     this.io = io_
     this.engineOn = false
     this.addressesChecked = 0
@@ -101,6 +104,60 @@ class CurrencyEngine {
       }
     }
     this.log(`Created Wallet Type ${this.walletInfo.type} for Currency Plugin ${this.currencyInfo.pluginName}`)
+  }
+
+  async loadEngine (plugin: EdgeCurrencyPlugin, io: EdgeIo, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions): Promise<void> {
+    const folder = this.walletLocalFolder.folder(DATA_STORE_FOLDER)
+    try {
+      const result = await folder.file(DATA_STORE_FILE).getText()
+      this.walletLocalData = new WalletLocalData(result, this.currencyInfo.currencyCode)
+      this.walletLocalData.publicKey = this.walletInfo.keys.publicKey
+    } catch (err) {
+      try {
+        console.log(err)
+        console.log('No walletLocalData setup yet: Failure is ok')
+        this.walletLocalData = new WalletLocalData(null, this.currencyInfo.currencyCode)
+        this.walletLocalData.publicKey = this.walletInfo.keys.publicKey
+        await folder.file(DATA_STORE_FILE)
+          .setText(JSON.stringify(this.walletLocalData))
+      } catch (e) {
+        console.log('Error writing to localDataStore. Engine not started:' + err)
+        throw e
+      }
+    }
+    try {
+      const result = await folder.file(TXID_LIST_FILE).getText()
+      this.txIdList = JSON.parse(result)
+    } catch (e) {
+      console.log('Could not load txidList file. Failure is ok on new device')
+      await folder.file(TXID_LIST_FILE)
+        .setText(JSON.stringify(this.txIdList))
+    }
+    try {
+      const result = await folder.file(TXID_MAP_FILE).getText()
+      this.txIdMap = JSON.parse(result)
+    } catch (e) {
+      console.log('Could not load txidMap file. Failure is ok on new device')
+      await folder.file(TXID_MAP_FILE)
+        .setText(JSON.stringify(this.txIdMap))
+    }
+
+    // Load transactions in the background
+    this.transactionsLoadingPromise = folder.file(TRANSACTION_STORE_FILE).getText().then(result => {
+      this.transactionList = JSON.parse(result)
+      this.transactionsLoadingPromise = null
+      setTimeout(() => {
+        this.doInitialTransactionsCallback()
+      }, 5000)
+    }).catch(e => {
+      console.log(e)
+      console.log('Failed to load transactionList store file. Failure is ok on new device')
+    })
+
+    for (const token of this.walletLocalData.enabledTokens) {
+      this.tokenCheckStatus[token] = 0
+    }
+    this.doInitialBalanceCallback()
   }
 
   findTransaction (currencyCode: string, txid: string) {
@@ -257,7 +314,7 @@ class CurrencyEngine {
     return true
   }
 
-  getTokenInfoCommon (token: string) {
+  getTokenInfo (token: string) {
     return this.allTokens.find(element => {
       return element.currencyCode === token
     })
@@ -268,18 +325,19 @@ class CurrencyEngine {
     console.log(...text)
   }
 
-  async startEngineCommon () {
+  async startEngine () {
     this.addToLoop('saveWalletLoop', SAVE_DATASTORE_MILLISECONDS)
   }
+
   // *************************************
   // Public methods
   // *************************************
 
-  updateSettingsCommon (settings: any) {
+  updateSettings (settings: any) {
     this.currentSettings = settings
   }
 
-  async resyncBlockchainCommon (): Promise<void> {
+  async clearBlockchainCache (): Promise<void> {
     const temp = JSON.stringify({
       enabledTokens: this.walletLocalData.enabledTokens,
       publicKey: this.walletLocalData.publicKey
@@ -296,7 +354,7 @@ class CurrencyEngine {
   }
 
   // synchronous
-  getBlockHeightCommon (): number {
+  getBlockHeight (): number {
     return parseInt(this.walletLocalData.blockHeight)
   }
 
@@ -309,7 +367,7 @@ class CurrencyEngine {
   }
 
   // asynchronous
-  async enableTokensCommon (tokens: Array<string>) {
+  async enableTokens (tokens: Array<string>) {
     this.enableTokensSync(tokens)
   }
 
@@ -323,15 +381,15 @@ class CurrencyEngine {
   }
 
   // asynchronous
-  async disableTokensCommon (tokens: Array<string>) {
+  async disableTokens (tokens: Array<string>) {
     this.disableTokensSync(tokens)
   }
 
-  async getEnabledTokensCommon (): Promise<Array<string>> {
+  async getEnabledTokens (): Promise<Array<string>> {
     return this.walletLocalData.enabledTokens
   }
 
-  async addCustomTokenCommon (obj: any) {
+  async addCustomToken (obj: any) {
     const valid = validateObject(obj, CustomTokenSchema)
 
     if (valid) {
@@ -399,12 +457,12 @@ class CurrencyEngine {
   }
 
   // synchronous
-  getTokenStatusCommon (token: string) {
+  getTokenStatus (token: string) {
     return this.walletLocalData.enabledTokens.indexOf(token) !== -1
   }
 
   // synchronous
-  getBalanceCommon (options: any): string {
+  getBalance (options: any): string {
     let currencyCode = this.currencyInfo.currencyCode
 
     if (typeof options !== 'undefined') {
@@ -429,7 +487,7 @@ class CurrencyEngine {
   }
 
   // synchronous
-  getNumTransactionsCommon (options: any): number {
+  getNumTransactions (options: any): number {
     let currencyCode = this.currencyInfo.currencyCode
 
     const valid = validateObject(options, {
@@ -451,7 +509,7 @@ class CurrencyEngine {
   }
 
   // asynchronous
-  async getTransactionsCommon (options: any) {
+  async getTransactions (options: any) {
     let currencyCode:string = this.currencyInfo.currencyCode
 
     const valid:boolean = validateObject(options, {
@@ -518,20 +576,20 @@ class CurrencyEngine {
   }
 
   // synchronous
-  getFreshAddressCommon (options: any): EdgeFreshAddress {
+  getFreshAddress (options: any): EdgeFreshAddress {
     return { publicAddress: this.walletLocalData.publicKey }
   }
 
   // synchronous
-  addGapLimitAddressesCommon (addresses: Array<string>, options: any) { }
+  addGapLimitAddresses (addresses: Array<string>, options: any) { }
 
   // synchronous
-  isAddressUsedCommon (address: string, options: any) {
+  isAddressUsed (address: string, options: any) {
     return false
   }
 
   // synchronous
-  dumpDataCommon (): EdgeDataDump {
+  dumpData (): EdgeDataDump {
     const dataDump: EdgeDataDump = {
       walletId: this.walletId.split(' - ')[0],
       walletType: this.walletInfo.type,
@@ -544,7 +602,7 @@ class CurrencyEngine {
   }
 
   // asynchronous
-  async saveTxCommon (edgeTransaction: EdgeTransaction) {
+  async saveTx (edgeTransaction: EdgeTransaction) {
     this.addTransaction(edgeTransaction.currencyCode, edgeTransaction)
     this.currencyEngineCallbacks.onTransactionsChanged([edgeTransaction])
   }

@@ -7,16 +7,8 @@ import { currencyInfo } from './xrpInfo.js'
 import type {
   EdgeTransaction,
   EdgeSpendInfo,
-  EdgeCurrencyPlugin,
   EdgeCurrencyEngineOptions,
-  EdgeWalletInfo,
-  EdgeDataDump,
-  EdgeFreshAddress
-  // EdgeCurrencyEngineCallbacks,
-  // EdgeMetaToken,
-  // EdgeCurrencyInfo,
-  // EdgeDenomination,
-  // EdgeIo
+  EdgeWalletInfo
 } from 'edge-core-js'
 import { error } from 'edge-core-js'
 
@@ -31,6 +23,7 @@ import {
   type XrpGetTransactions,
   type XrpWalletOtherData
 } from './xrpTypes.js'
+import { XrpPlugin } from './xrpPlugin.js'
 import {
   CurrencyEngine
 } from '../common/engine.js'
@@ -49,24 +42,23 @@ type XrpParams = {
   // contractAddress?: string
 }
 export class XrpEngine extends CurrencyEngine {
-  // TODO: Add currency specific params
-  rippleApi: Object
+  xrpPlugin: XrpPlugin
   otherData: XrpWalletOtherData
 
-  constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
+  constructor (currencyPlugin: XrpPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     super(currencyPlugin, io_, walletInfo, opts)
-    this.rippleApi = {}
+    this.xrpPlugin = currencyPlugin
   }
 
   // Poll on the blockheight
   async checkServerInfoInnerLoop () {
     try {
-      const fee = await this.rippleApi.getFee()
+      const fee = await this.xrpPlugin.rippleApi.getFee()
       if (typeof fee === 'string') {
         this.otherData.recommendedFee = fee
         this.walletLocalDataDirty = true
       }
-      const jsonObj = await this.rippleApi.getServerInfo()
+      const jsonObj = await this.xrpPlugin.rippleApi.getServerInfo()
       const valid = validateObject(jsonObj, XrpGetServerInfoSchema)
       if (valid) {
         const blockHeight: number = jsonObj.validatedLedger.ledgerVersion
@@ -138,7 +130,7 @@ export class XrpEngine extends CurrencyEngine {
       if (startBlock > ADDRESS_QUERY_LOOKBACK_BLOCKS) {
         options = { minLedgerVersion: startBlock }
       }
-      const transactions: XrpGetTransactions = await this.rippleApi.getTransactions(address, options)
+      const transactions: XrpGetTransactions = await this.xrpPlugin.rippleApi.getTransactions(address, options)
       const valid = validateObject(transactions, XrpGetTransactionsSchema)
       if (valid) {
         this.log('Fetched transactions count: ' + transactions.length)
@@ -170,7 +162,7 @@ export class XrpEngine extends CurrencyEngine {
     if (this.addressesChecked) {
       return
     }
-    this.addressesChecked = 0
+    this.addressesChecked = 1
     this.walletLocalData.lastAddressQueryHeight = this.walletLocalData.blockHeight
     this.currencyEngineCallbacks.onAddressesChecked(1)
   }
@@ -183,7 +175,7 @@ export class XrpEngine extends CurrencyEngine {
   async checkAccountInnerLoop () {
     const address = this.walletLocalData.publicKey
     try {
-      const jsonObj = await this.rippleApi.getBalances(address)
+      const jsonObj = await this.xrpPlugin.rippleApi.getBalances(address)
       const valid = validateObject(jsonObj, XrpGetBalancesSchema)
       if (valid) {
         for (const bal of jsonObj) {
@@ -206,76 +198,40 @@ export class XrpEngine extends CurrencyEngine {
     }
   }
 
+  async clearBlockchainCache () {
+    await super.clearBlockchainCache()
+  }
+
   // ****************************************************************************
   // Public methods
   // ****************************************************************************
 
-  updateSettings (settings: any) { return this.updateSettingsCommon(settings) }
-
   async startEngine () {
     this.engineOn = true
-    await this.rippleApi.connect()
+    await this.xrpPlugin.rippleApi.connect()
     this.addToLoop('checkServerInfoInnerLoop', BLOCKHEIGHT_POLL_MILLISECONDS)
     this.addToLoop('checkAccountInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
-    this.startEngineCommon()
+    super.startEngine()
   }
 
   async killEngine () {
     // Set status flag to false
     this.engineOn = false
     // Clear Inner loops timers
+    // TODO: make common
     for (const timer in this.timers) {
       clearTimeout(this.timers[timer])
     }
     this.timers = {}
-    await this.rippleApi.disconnect()
+    await this.xrpPlugin.rippleApi.disconnect()
   }
 
   async resyncBlockchain (): Promise<void> {
     await this.killEngine()
-    await this.resyncBlockchainCommon()
+    await this.clearBlockchainCache()
     await this.startEngine()
   }
-
-  // synchronous
-  getBlockHeight (): number { return this.getBlockHeightCommon() }
-
-  // asynchronous
-  enableTokens (tokens: Array<string>) { return this.enableTokensCommon(tokens) }
-
-  // asynchronous
-  disableTokens (tokens: Array<string>) { return this.disableTokensCommon(tokens) }
-
-  getTokenInfo (token: string) { return this.getTokenInfoCommon(token) }
-
-  async getEnabledTokens (): Promise<Array<string>> { return this.getEnabledTokensCommon() }
-
-  async addCustomToken (tokenObj: any) { return this.addCustomTokenCommon(tokenObj) }
-
-  // synchronous
-  getTokenStatus (token: string) { return this.getTokenStatusCommon(token) }
-
-  // synchronous
-  getBalance (options: any): string { return this.getBalanceCommon(options) }
-
-  // synchronous
-  getNumTransactions (options: any): number { return this.getNumTransactionsCommon(options) }
-
-  // asynchronous
-  async getTransactions (options: any) { return this.getTransactionsCommon(options) }
-  // synchronous
-
-  getFreshAddress (options: any): EdgeFreshAddress { return this.getFreshAddressCommon(options) }
-
-  // synchronous
-  addGapLimitAddresses (addresses: Array<string>, options: any) { return this.addGapLimitAddressesCommon(addresses, options) }
-
-  // synchronous
-  isAddressUsed (address: string, options: any) { return this.isAddressUsedCommon(address, options) }
-
-  // synchronous
-  dumpData (): EdgeDataDump { return this.dumpDataCommon() }
 
   // synchronous
   async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
@@ -386,7 +342,7 @@ export class XrpEngine extends CurrencyEngine {
 
     let preparedTx = {}
     try {
-      preparedTx = await this.rippleApi.preparePayment(
+      preparedTx = await this.xrpPlugin.rippleApi.preparePayment(
         this.walletLocalData.publicKey,
         payment,
         { maxLedgerVersionOffset: 300 }
@@ -424,7 +380,7 @@ export class XrpEngine extends CurrencyEngine {
     const txJson = edgeTransaction.otherParams.preparedTx.txJSON
     const privateKey = this.walletInfo.keys.rippleKey
 
-    const { signedTransaction, id } = this.rippleApi.sign(txJson, privateKey)
+    const { signedTransaction, id } = this.xrpPlugin.rippleApi.sign(txJson, privateKey)
     console.log('Payment transaction signed...')
 
     edgeTransaction.signedTx = signedTransaction
@@ -436,12 +392,9 @@ export class XrpEngine extends CurrencyEngine {
 
   // asynchronous
   async broadcastTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
-    await this.rippleApi.submit(edgeTransaction.signedTx)
+    await this.xrpPlugin.rippleApi.submit(edgeTransaction.signedTx)
     return edgeTransaction
   }
-
-  // asynchronous
-  async saveTx (edgeTransaction: EdgeTransaction) { return this.saveTxCommon(edgeTransaction) }
 
   getDisplayPrivateSeed () {
     if (this.walletInfo.keys && this.walletInfo.keys.rippleKey) {

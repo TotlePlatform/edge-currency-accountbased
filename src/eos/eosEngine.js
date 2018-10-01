@@ -3,20 +3,12 @@
  */
 // @flow
 
-// import { currencyInfo } from './eosInfo.js'
 import type {
   EdgeTransaction,
   EdgeSpendInfo,
-  EdgeCurrencyPlugin,
   EdgeWalletInfo,
   EdgeCurrencyEngineOptions,
-  EdgeFreshAddress,
-  EdgeDataDump
-  // EdgeCurrencyEngineCallbacks,
-  // EdgeMetaToken,
-  // EdgeCurrencyInfo,
-  // EdgeDenomination,
-  // EdgeIo
+  EdgeFreshAddress
 } from 'edge-core-js'
 import { error } from 'edge-core-js'
 import { bns } from 'biggystring'
@@ -26,6 +18,9 @@ import {
 import {
   CurrencyEngine
 } from '../common/engine.js'
+import {
+  CurrencyPlugin
+} from '../common/plugin.js'
 import { validateObject, getDenomInfo } from '../common/utils.js'
 import {
   type EosGetTransaction,
@@ -36,7 +31,6 @@ import eosjs from 'eosjs'
 const ADDRESS_POLL_MILLISECONDS = 10000
 const BLOCKCHAIN_POLL_MILLISECONDS = 15000
 const TRANSACTION_POLL_MILLISECONDS = 3000
-// const ADDRESS_QUERY_LOOKBACK_BLOCKS = (30 * 60) // ~ one minute
 
 // ----MAIN NET----
 const config = {
@@ -54,10 +48,12 @@ export class EosEngine extends CurrencyEngine {
   // to the EosEngine class definition in eosEngine.js and initialize them in the
   // constructor()
   eosServer: Object
+  balancesChecked: number
+  transactionsChecked: number
   activatedAccountsCache: { [publicAddress: string ]: boolean }
   otherData: EosWalletOtherData
 
-  constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
+  constructor (currencyPlugin: CurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     super(currencyPlugin, io_, walletInfo, opts)
     if (typeof this.walletInfo.keys.ownerPublicKey !== 'string') {
       if (walletInfo.keys.ownerPublicKey) {
@@ -68,6 +64,8 @@ export class EosEngine extends CurrencyEngine {
       }
     }
 
+    this.balancesChecked = 0
+    this.transactionsChecked = 0
     this.activatedAccountsCache = {}
     this.eosServer = {}
   }
@@ -129,6 +127,7 @@ export class EosEngine extends CurrencyEngine {
       const [ exchangeAmount, currencyCode ] = split
 
       const denom = getDenomInfo(this.currencyInfo, currencyCode)
+      if (!denom) { throw new Error('ErrorInvalidCurrencyCode') }
       let nativeAmount = bns.mul(exchangeAmount, denom.multiplier)
       if (to === this.walletLocalData.otherData.accountName) {
         ourReceiveAddresses.push(to)
@@ -242,6 +241,8 @@ export class EosEngine extends CurrencyEngine {
           this.processTransaction(action)
         }
       }
+      this.transactionsChecked = 1
+      this.updateOnAddressesChecked()
     } catch (e) {
       console.log(e)
     }
@@ -286,12 +287,11 @@ export class EosEngine extends CurrencyEngine {
   }
 
   updateOnAddressesChecked () {
-    if (this.addressesChecked) {
+    if (this.addressesChecked === 1) {
       return
     }
-    this.addressesChecked = 1
-    this.walletLocalData.lastAddressQueryHeight = this.walletLocalData.blockHeight
-    this.currencyEngineCallbacks.onAddressesChecked(1)
+    this.addressesChecked = (this.balancesChecked + this.transactionsChecked) / 2
+    this.currencyEngineCallbacks.onAddressesChecked(this.addressesChecked)
   }
 
   // Check all account balance and other relevant info
@@ -343,16 +343,21 @@ export class EosEngine extends CurrencyEngine {
           }
         }
       }
+      this.balancesChecked = 1
+      this.updateOnAddressesChecked()
     } catch (e) {
       this.log(`Error fetching account: ${JSON.stringify(e)}`)
     }
   }
 
+  async clearBlockchainCache (): Promise<void> {
+    this.activatedAccountsCache = {}
+    await super.clearBlockchainCache()
+  }
+
   // ****************************************************************************
   // Public methods
   // ****************************************************************************
-
-  updateSettings (settings: any) { this.updateSettingsCommon(settings) }
 
   // This routine is called once a wallet needs to start querying the network
   async startEngine () {
@@ -364,7 +369,7 @@ export class EosEngine extends CurrencyEngine {
     this.addToLoop('checkBlockchainInnerLoop', BLOCKCHAIN_POLL_MILLISECONDS)
     this.addToLoop('checkAccountInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
-    this.startEngineCommon()
+    super.startEngine()
   }
 
   async killEngine () {
@@ -379,38 +384,9 @@ export class EosEngine extends CurrencyEngine {
 
   async resyncBlockchain (): Promise<void> {
     await this.killEngine()
-    this.activatedAccountsCache = {}
-    await this.resyncBlockchainCommon()
+    await this.clearBlockchainCache()
     await this.startEngine()
   }
-
-  // synchronous
-  getBlockHeight (): number { return this.getBlockHeightCommon() }
-
-  // asynchronous
-  enableTokens (tokens: Array<string>) { return this.enableTokensCommon(tokens) }
-
-  // asynchronous
-  disableTokens (tokens: Array<string>) { return this.disableTokensCommon(tokens) }
-
-  getTokenInfo (token: string) { return this.getTokenInfoCommon(token) }
-
-  async getEnabledTokens (): Promise<Array<string>> { return this.getEnabledTokensCommon() }
-
-  async addCustomToken (tokenObj: any) { return this.addCustomTokenCommon(tokenObj) }
-
-  // synchronous
-  getTokenStatus (token: string) { return this.getTokenStatusCommon(token) }
-
-  // synchronous
-  getBalance (options: any): string { return this.getBalanceCommon(options) }
-
-  // synchronous
-  getNumTransactions (options: any): number { return this.getNumTransactionsCommon(options) }
-
-  // asynchronous
-  async getTransactions (options: any) { return this.getTransactionsCommon(options) }
-  // synchronous
 
   getFreshAddress (options: any): EdgeFreshAddress {
     if (this.walletLocalData.otherData.accountName) {
@@ -424,15 +400,6 @@ export class EosEngine extends CurrencyEngine {
       }
     }
   }
-
-  // synchronous
-  addGapLimitAddresses (addresses: Array<string>, options: any) { return this.addGapLimitAddressesCommon(addresses, options) }
-
-  // synchronous
-  isAddressUsed (address: string, options: any) { return this.isAddressUsedCommon(address, options) }
-
-  // synchronous
-  dumpData (): EdgeDataDump { return this.dumpDataCommon() }
 
   // synchronous
   async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
@@ -647,9 +614,6 @@ export class EosEngine extends CurrencyEngine {
     edgeTransaction.txid = signedTx.transaction_id
     return edgeTransaction
   }
-
-  // asynchronous
-  async saveTx (edgeTransaction: EdgeTransaction) { return this.saveTxCommon(edgeTransaction) }
 
   getDisplayPrivateSeed () {
     if (this.walletInfo.keys && this.walletInfo.keys.rippleKey) {

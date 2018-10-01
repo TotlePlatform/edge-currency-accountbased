@@ -7,26 +7,12 @@
 import type {
   EdgeTransaction,
   EdgeSpendInfo,
-  EdgeCurrencyPlugin,
   EdgeCurrencyEngineOptions,
-  EdgeWalletInfo,
-  EdgeDataDump,
-  EdgeFreshAddress
-  // EdgeCurrencyEngineCallbacks,
-  // EdgeMetaToken,
-  // EdgeCurrencyInfo,
-  // EdgeDenomination,
-  // EdgeIo
+  EdgeWalletInfo
 } from 'edge-core-js'
 import { error } from 'edge-core-js'
-// import { sprintf } from 'sprintf-js'
 
 import { bns } from 'biggystring'
-// import {
-//   // StellarGetServerInfoSchema,
-//   StellarGetBalancesSchema,
-//   StellarGetTransactionsSchema
-// } from './stellarSchema.js'
 import { MakeSpendSchema } from '../common/schema.js'
 import {
   type StellarAccount,
@@ -37,6 +23,9 @@ import {
 import {
   CurrencyEngine
 } from '../common/engine.js'
+import {
+  CurrencyPlugin
+} from '../common/plugin.js'
 import { validateObject, getDenomInfo } from '../common/utils.js'
 
 const TX_QUERY_PAGING_LIMIT = 2
@@ -45,7 +34,6 @@ const BLOCKCHAIN_POLL_MILLISECONDS = 30000
 const TRANSACTION_POLL_MILLISECONDS = 5000
 
 export class StellarEngine extends CurrencyEngine {
-  // TODO: Add currency specific params
   stellarApi: Object
   stellarServer: Object
   balancesChecked: number
@@ -54,7 +42,7 @@ export class StellarEngine extends CurrencyEngine {
   pendingTransactionsMap: { [txid: string ]: Object }
   otherData: StellarWalletOtherData
 
-  constructor (currencyPlugin: EdgeCurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
+  constructor (currencyPlugin: CurrencyPlugin, io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     super(currencyPlugin, io_, walletInfo, opts)
     this.stellarApi = {}
     this.balancesChecked = 0
@@ -190,9 +178,9 @@ export class StellarEngine extends CurrencyEngine {
     if (pagingToken) {
       this.otherData.lastPagingToken = pagingToken
       this.walletLocalDataDirty = true
-      this.transactionsChecked = 1
-      this.updateOnAddressesChecked()
     }
+    this.transactionsChecked = 1
+    this.updateOnAddressesChecked()
   }
 
   updateOnAddressesChecked () {
@@ -237,6 +225,7 @@ export class StellarEngine extends CurrencyEngine {
         }
       }
       this.balancesChecked = 1
+      this.updateOnAddressesChecked()
     } catch (e) {
       this.log(`Error fetching address info: ${JSON.stringify(e)}`)
     }
@@ -255,11 +244,18 @@ export class StellarEngine extends CurrencyEngine {
     })
   }
 
+  async clearBlockchainCache (): Promise<void> {
+    this.balancesChecked = 0
+    this.transactionsChecked = 0
+    this.activatedAccountsCache = {}
+    this.otherData.accountSequence = 0
+    this.pendingTransactionsMap = {}
+    await super.clearBlockchainCache()
+  }
+
   // ****************************************************************************
   // Public methods
   // ****************************************************************************
-
-  updateSettings (settings: any) { return this.updateSettingsCommon(settings) }
 
   async startEngine () {
     this.engineOn = true
@@ -268,7 +264,7 @@ export class StellarEngine extends CurrencyEngine {
     this.addToLoop('checkBlockchainInnerLoop', BLOCKCHAIN_POLL_MILLISECONDS)
     this.addToLoop('checkAccountInnerLoop', ADDRESS_POLL_MILLISECONDS)
     this.addToLoop('checkTransactionsInnerLoop', TRANSACTION_POLL_MILLISECONDS)
-    this.startEngineCommon()
+    super.startEngine()
   }
 
   async killEngine () {
@@ -283,53 +279,9 @@ export class StellarEngine extends CurrencyEngine {
 
   async resyncBlockchain (): Promise<void> {
     await this.killEngine()
-    this.balancesChecked = 0
-    this.transactionsChecked = 0
-    this.activatedAccountsCache = {}
-    this.otherData.accountSequence = 0
-    this.pendingTransactionsMap = {}
-    await this.resyncBlockchainCommon()
+    await this.clearBlockchainCache()
     await this.startEngine()
   }
-
-  // synchronous
-  getBlockHeight (): number { return this.getBlockHeightCommon() }
-
-  // asynchronous
-  enableTokens (tokens: Array<string>) { return this.enableTokensCommon(tokens) }
-
-  // asynchronous
-  disableTokens (tokens: Array<string>) { return this.disableTokensCommon(tokens) }
-
-  getTokenInfo (token: string) { return this.getTokenInfoCommon(token) }
-
-  async getEnabledTokens (): Promise<Array<string>> { return this.getEnabledTokensCommon() }
-
-  async addCustomToken (tokenObj: any) { return this.addCustomTokenCommon(tokenObj) }
-
-  // synchronous
-  getTokenStatus (token: string) { return this.getTokenStatusCommon(token) }
-
-  // synchronous
-  getBalance (options: any): string { return this.getBalanceCommon(options) }
-
-  // synchronous
-  getNumTransactions (options: any): number { return this.getNumTransactionsCommon(options) }
-
-  // asynchronous
-  async getTransactions (options: any) { return this.getTransactionsCommon(options) }
-  // synchronous
-
-  getFreshAddress (options: any): EdgeFreshAddress { return this.getFreshAddressCommon(options) }
-
-  // synchronous
-  addGapLimitAddresses (addresses: Array<string>, options: any) { return this.addGapLimitAddressesCommon(addresses, options) }
-
-  // synchronous
-  isAddressUsed (address: string, options: any) { return this.isAddressUsedCommon(address, options) }
-
-  // synchronous
-  dumpData (): EdgeDataDump { return this.dumpDataCommon() }
 
   // synchronous
   async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
@@ -492,9 +444,6 @@ export class StellarEngine extends CurrencyEngine {
     }
     return edgeTransaction
   }
-
-  // asynchronous
-  async saveTx (edgeTransaction: EdgeTransaction) { return this.saveTxCommon(edgeTransaction) }
 
   getDisplayPrivateSeed () {
     if (this.walletInfo.keys && this.walletInfo.keys.stellarKey) {
