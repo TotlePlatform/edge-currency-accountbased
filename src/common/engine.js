@@ -41,8 +41,10 @@ class CurrencyEngine {
   currencyEngineCallbacks: EdgeCurrencyEngineCallbacks
   walletLocalFolder: Object
   engineOn: boolean
-  addressesChecked: number // True once wallet has been fully checked on the network
-  tokenCheckStatus: { [currencyCode: string]: number } // Each currency code can be a 0-1 value
+  balancesChecked: number
+  transactionsChecked: number
+  tokenCheckBalanceStatus: { [currencyCode: string]: number } // Each currency code can be a 0-1 value
+  tokenCheckTransactionsStatus: { [currencyCode: string]: number } // Each currency code can be a 0-1 value
   walletLocalData: WalletLocalData
   walletLocalDataDirty: boolean
   transactionListDirty: boolean
@@ -72,8 +74,10 @@ class CurrencyEngine {
     this.currencyPlugin = currencyPlugin
     this.io = io_
     this.engineOn = false
-    this.addressesChecked = 0
-    this.tokenCheckStatus = {}
+    this.balancesChecked = 0
+    this.transactionsChecked = 0
+    this.tokenCheckBalanceStatus = {}
+    this.tokenCheckTransactionsStatus = {}
     this.walletLocalDataDirty = false
     this.transactionsChangedArray = []
     this.transactionList = {}
@@ -410,6 +414,28 @@ class CurrencyEngine {
     })
   }
 
+  updateOnAddressesChecked () {
+    if (this.balancesChecked === 1 && this.transactionsChecked === 1) {
+      return
+    }
+    const activeTokens: Array<string> = []
+
+    for (const tokenCode of this.walletLocalData.enabledTokens) {
+      const ti = this.getTokenInfo(tokenCode)
+      if (ti) {
+        activeTokens.push(tokenCode)
+      }
+    }
+
+    const perTokenSlice = 1 / activeTokens.length
+    let totalStatus = 0
+    for (const token of activeTokens) {
+      const status = this.tokenCheckStatus[token]
+      totalStatus += status * perTokenSlice
+    }
+    this.currencyEngineCallbacks.onAddressesChecked(totalStatus)
+  }
+
   log (...text: Array<any>) {
     text[0] = `${this.walletId.slice(0, 5)}: ${text[0].toString()}`
     console.log(...text)
@@ -437,7 +463,8 @@ class CurrencyEngine {
       this.currencyInfo.currencyCode
     )
     this.walletLocalDataDirty = true
-    this.addressesChecked = 0
+    this.transactionsChecked = 0
+    this.balancesChecked = 0
     this.transactionList = {}
     this.txIdList = {}
     this.txIdMap = {}
