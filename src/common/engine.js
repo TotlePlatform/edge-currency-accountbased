@@ -96,6 +96,11 @@ class CurrencyEngine {
     this.txIdMap[currencyCode] = {}
     this.txIdList[currencyCode] = []
 
+    for (const token of this.walletLocalData.enabledTokens) {
+      this.tokenCheckBalanceStatus[token] = 0
+      this.tokenCheckTransactionsStatus[token] = 0
+    }
+
     if (typeof opts.optionalSettings !== 'undefined') {
       this.currentSettings = opts.optionalSettings
     } else {
