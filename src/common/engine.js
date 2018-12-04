@@ -218,7 +218,8 @@ class CurrencyEngine {
     }
 
     for (const token of this.walletLocalData.enabledTokens) {
-      this.tokenCheckStatus[token] = 0
+      this.tokenCheckBalanceStatus[token] = 0
+      this.tokenCheckTransactionsStatus[token] = 0
     }
     this.doInitialBalanceCallback()
   }
@@ -435,8 +436,9 @@ class CurrencyEngine {
     const perTokenSlice = 1 / activeTokens.length
     let totalStatus = 0
     for (const token of activeTokens) {
-      const status = this.tokenCheckStatus[token]
-      totalStatus += status * perTokenSlice
+      const balanceStatus = this.tokenCheckBalanceStatus[token]
+      const txStatus = this.tokenCheckBalanceStatus[token]
+      totalStatus += ((balanceStatus + txStatus) / 2) * perTokenSlice
     }
     this.currencyEngineCallbacks.onAddressesChecked(totalStatus)
   }
