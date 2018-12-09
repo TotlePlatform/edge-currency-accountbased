@@ -57,8 +57,6 @@ export class EosEngine extends CurrencyEngine {
   // to the EosEngine class definition in eosEngine.js and initialize them in the
   // constructor()
   eosPlugin: EosPlugin
-  balancesChecked: number
-  transactionsChecked: number
   activatedAccountsCache: { [publicAddress: string]: boolean }
   otherData: EosWalletOtherData
   otherMethods: Object
@@ -72,8 +70,6 @@ export class EosEngine extends CurrencyEngine {
     super(currencyPlugin, io_, walletInfo, opts)
 
     this.eosPlugin = currencyPlugin
-    this.balancesChecked = 0
-    this.transactionsChecked = 0
     this.activatedAccountsCache = {}
     this.otherMethods = {
       getAccountActivationQuote: async (params: Object): Promise<Object> => {
@@ -260,6 +256,7 @@ export class EosEngine extends CurrencyEngine {
   }
 
   async checkTransactionsInnerLoop () {
+    const blockHeight = this.walletLocalData.blockHeight
     try {
       let startBlock: number = 0
       if (this.walletLocalData.lastAddressQueryHeight > ADDRESS_QUERY_LOOKBACK_BLOCKS) {
@@ -281,7 +278,6 @@ export class EosEngine extends CurrencyEngine {
             this.processTransactionSuperNode(action)
           }
         }
-        this.transactionsChecked = 1
       } catch (e) {
         // Try regular nodes
         const actionsObject = await this.multicastServers('getActions',
@@ -297,10 +293,10 @@ export class EosEngine extends CurrencyEngine {
             this.processTransaction(action)
           }
         }
-        this.transactionsChecked = 1
       }
 
       this.updateOnAddressesChecked()
+      this.walletLocalData.lastAddressQueryHeight = blockHeight
     } catch (e) {
       this.log(e)
     }
@@ -310,15 +306,6 @@ export class EosEngine extends CurrencyEngine {
       )
       this.transactionsChangedArray = []
     }
-  }
-
-  updateOnAddressesChecked () {
-    if (this.addressesChecked === 1) {
-      return
-    }
-    this.addressesChecked =
-      (this.balancesChecked + this.transactionsChecked) / 2
-    this.currencyEngineCallbacks.onAddressesChecked(this.addressesChecked)
   }
 
   async multicastServers (func: EosFunction, ...params: any): Promise<any> {
